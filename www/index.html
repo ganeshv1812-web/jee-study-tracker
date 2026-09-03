@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>JEE Study Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">JEE STUDY TRACKER</div>
+      <div class="title">JEE Aspirant</div>
+    </div>
+    <div class="streak-badge">🔥 <span id="streakCount">0</span> Day Streak</div>
+  </header>
+
+  <main class="content">
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="todayHours">0.0h</div>
+        <div class="stat-label">Today's Study</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value accent-cyan" id="totalHours">0.0h</div>
+        <div class="stat-label">Total Logged Hours</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="taskCount">0/0</div>
+        <div class="stat-label">Tasks Done</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><h2>Log Study Session</h2></div>
+      <form id="sessionForm" class="inline-form">
+        <select id="sessionSubject" required>
+          <option value="Physics">Physics</option>
+          <option value="Chemistry">Chemistry</option>
+          <option value="Mathematics">Mathematics</option>
+        </select>
+        <input type="number" id="sessionMinutes" placeholder="Minutes" min="1" required>
+        <button type="submit" class="btn-primary">Add</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><h2>Pending Tasks</h2></div>
+      <form id="taskForm" class="inline-form">
+        <input type="text" id="taskInput" placeholder="e.g. Solve 30 questions on Capacitance" required>
+        <button type="submit" class="btn-primary">+ Add</button>
+      </form>
+      <ul id="taskList" class="task-list"></ul>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><h2>Recent Study Logs</h2></div>
+      <ul id="sessionList" class="session-list"></ul>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-tab="dashboard">🏠<span>Dashboard</span></button>
+    <button class="nav-item" data-soon="1">📘<span>Syllabus</span></button>
+    <button class="nav-item" data-soon="1">🕐<span>Daily Log</span></button>
+    <button class="nav-item" data-soon="1">📊<span>Tests</span></button>
+    <button class="nav-item" data-soon="1">🤖<span>AI Coach</span></button>
+    <button class="nav-item" data-soon="1">📈<span>Analytics</span></button>
+  </nav>
+
+  <div id="toast" class="toast"></div>
+</div>
+<script src="app.js"></script>
+</body>
+                       </html>
