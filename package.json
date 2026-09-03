@@ -1,0 +1,15 @@
+{
+  "name": "jee-study-tracker",
+  "version": "1.0.0",
+  "description": "JEE Study Tracker - offline study tracker app",
+  "scripts": {
+    "sync": "cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
