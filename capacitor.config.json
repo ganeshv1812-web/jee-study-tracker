@@ -1,0 +1,6 @@
+{
+  "appId": "com.jeestudytracker.app",
+  "appName": "JEE Study Tracker",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
