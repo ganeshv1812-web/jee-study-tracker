@@ -17,52 +17,79 @@
   </header>
 
   <main class="content">
-    <section class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value" id="todayHours">0.0h</div>
-        <div class="stat-label">Today's Study</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value accent-cyan" id="totalHours">0.0h</div>
-        <div class="stat-label">Total Logged Hours</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="taskCount">0/0</div>
-        <div class="stat-label">Tasks Done</div>
-      </div>
+
+    <section id="view-dashboard" class="view">
+      <section class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="todayHours">0.0h</div>
+          <div class="stat-label">Today's Study</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value accent-cyan" id="totalHours">0.0h</div>
+          <div class="stat-label">Total Logged Hours</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="taskCount">0/0</div>
+          <div class="stat-label">Tasks Done</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Log Study Session</h2></div>
+        <form id="sessionForm" class="inline-form">
+          <select id="sessionSubject" required>
+            <option value="Physics">Physics</option>
+            <option value="Chemistry">Chemistry</option>
+            <option value="Mathematics">Mathematics</option>
+          </select>
+          <input type="number" id="sessionMinutes" placeholder="Minutes" min="1" required>
+          <button type="submit" class="btn-primary">Add</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Pending Tasks</h2></div>
+        <form id="taskForm" class="inline-form">
+          <input type="text" id="taskInput" placeholder="e.g. Solve 30 questions on Capacitance" required>
+          <button type="submit" class="btn-primary">+ Add</button>
+        </form>
+        <ul id="taskList" class="task-list"></ul>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Recent Study Logs</h2></div>
+        <ul id="sessionList" class="session-list"></ul>
+      </section>
     </section>
 
-    <section class="card">
-      <div class="card-header"><h2>Log Study Session</h2></div>
-      <form id="sessionForm" class="inline-form">
-        <select id="sessionSubject" required>
-          <option value="Physics">Physics</option>
-          <option value="Chemistry">Chemistry</option>
-          <option value="Mathematics">Mathematics</option>
-        </select>
-        <input type="number" id="sessionMinutes" placeholder="Minutes" min="1" required>
-        <button type="submit" class="btn-primary">Add</button>
-      </form>
+    <section id="view-syllabus" class="view" style="display:none;">
+      <div class="subject-tabs" id="subjectTabs">
+        <button class="subject-tab active" data-subject="Physics">Physics</button>
+        <button class="subject-tab" data-subject="Chemistry">Chemistry</button>
+        <button class="subject-tab" data-subject="Mathematics">Mathematics</button>
+      </div>
+
+      <section class="card">
+        <div class="card-header"><h2 id="subjectSummary">Physics — 0 of 0 chapters completed</h2></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Add Chapter</h2></div>
+        <form id="chapterForm" class="inline-form">
+          <input type="text" id="chapterName" placeholder="Chapter name" required>
+          <input type="date" id="chapterTarget">
+          <button type="submit" class="btn-primary">+ Add</button>
+        </form>
+      </section>
+
+      <div id="chapterList" class="chapter-list"></div>
     </section>
 
-    <section class="card">
-      <div class="card-header"><h2>Pending Tasks</h2></div>
-      <form id="taskForm" class="inline-form">
-        <input type="text" id="taskInput" placeholder="e.g. Solve 30 questions on Capacitance" required>
-        <button type="submit" class="btn-primary">+ Add</button>
-      </form>
-      <ul id="taskList" class="task-list"></ul>
-    </section>
-
-    <section class="card">
-      <div class="card-header"><h2>Recent Study Logs</h2></div>
-      <ul id="sessionList" class="session-list"></ul>
-    </section>
   </main>
 
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="dashboard">🏠<span>Dashboard</span></button>
-    <button class="nav-item" data-soon="1">📘<span>Syllabus</span></button>
+    <button class="nav-item" data-tab="syllabus">📘<span>Syllabus</span></button>
     <button class="nav-item" data-soon="1">🕐<span>Daily Log</span></button>
     <button class="nav-item" data-soon="1">📊<span>Tests</span></button>
     <button class="nav-item" data-soon="1">🤖<span>AI Coach</span></button>
@@ -73,4 +100,4 @@
 </div>
 <script src="app.js"></script>
 </body>
-                       </html>
+</html>
