@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="errorBanner" class="error-banner" style="display:none;"></div>
 <div id="app">
   <header class="topbar">
     <div>
@@ -63,14 +64,10 @@
       </section>
 
       <section class="card">
-        <div class="card-header-row"><h2>Pending Tasks (<span id="pendingCount">0</span>)</h2></div>
-        <form id="taskForm" class="inline-form">
-          <input type="text" id="taskInput" placeholder="e.g. Solve 30 questions on Capacitance" required>
-          <input type="text" id="taskTag" placeholder="Type (optional)">
-          <input type="number" id="taskMinutes" placeholder="Mins" min="1">
-          <label class="urgent-label"><input type="checkbox" id="taskUrgent"> Urgent</label>
-          <button type="submit" class="btn-primary">+ Add</button>
-        </form>
+        <div class="card-header-row">
+          <h2>Pending Tasks (<span id="pendingCount">0</span>)</h2>
+          <button type="button" id="openTaskModalBtn" class="btn-primary btn-small-add">+ Add Task</button>
+        </div>
         <ul id="taskList" class="task-list"></ul>
       </section>
 
@@ -101,6 +98,7 @@
         <div class="command-stats">
           <span>Total Chapters: <b id="totalChapters">0</b></span>
           <span>Completed: <b id="completedChapters">0</b></span>
+          <span>Avg Progress: <b id="avgProgress">0%</b></span>
         </div>
       </section>
 
@@ -174,7 +172,27 @@
   </nav>
 
   <div id="toast" class="toast"></div>
+
+  <div id="taskModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h2>Add Study Task</h2>
+      <input type="text" id="modalTaskInput" placeholder="Task title (e.g. Solve 40 questions on Integration)">
+      <div class="field-label">Priority</div>
+      <div class="priority-row">
+        <button type="button" class="priority-btn active" data-priority="High">High</button>
+        <button type="button" class="priority-btn" data-priority="Medium">Medium</button>
+        <button type="button" class="priority-btn" data-priority="Low">Low</button>
+      </div>
+      <div class="field-label">Estimated Duration (minutes)</div>
+      <input type="number" id="modalTaskMinutes" min="1" value="60">
+      <div class="modal-actions">
+        <button type="button" id="cancelTaskBtn" class="btn-text">Cancel</button>
+        <button type="button" id="saveTaskBtn" class="btn-primary">Save Task</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 <script src="app.js"></script>
 </body>
-          </html>
+        </html>
