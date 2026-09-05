@@ -20,6 +20,18 @@ body {
   padding-bottom: 76px;
 }
 #app { max-width: 900px; margin: 0 auto; }
+.error-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  background: #7f1d1d;
+  color: #fff;
+  font-size: 12px;
+  padding: 10px 14px;
+  z-index: 9999;
+  word-break: break-word;
+  max-height: 40vh;
+  overflow-y: auto;
+}
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -61,7 +73,10 @@ body {
   padding: 16px;
   margin-bottom: 16px;
 }
-.card-header h2, .card-header-row h2 { font-size: 15px; margin: 0 0 12px; }
+.card-header h2, .card-header-row h2 { font-size: 15px; margin: 0; }
+.card-header { margin-bottom: 12px; }
+.card-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.btn-small-add { padding: 6px 12px; font-size: 12px; }
 .inline-form { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .inline-form input, .inline-form select {
   flex: 1;
@@ -82,6 +97,7 @@ body {
   font-weight: 700;
   font-size: 14px;
 }
+.btn-text { background: none; border: none; color: var(--text-secondary); font-weight: 600; font-size: 14px; padding: 10px 16px; }
 .btn-block { width: 100%; margin-top: 10px; padding: 14px; font-size: 15px; }
 .task-list, .session-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .task-item {
@@ -96,11 +112,10 @@ body {
 .task-check { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .task-body { display: flex; flex-direction: column; gap: 2px; }
 .task-meta { font-size: 11px; color: var(--text-secondary); display: flex; gap: 8px; }
-.task-tag { color: var(--accent-cyan); }
 .task-right { display: flex; align-items: center; gap: 8px; }
-.priority-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-amber); }
-.priority-dot.urgent { background: var(--accent-red); }
-.urgent-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.priority-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-red); }
+.priority-dot.medium { background: var(--accent-amber); }
+.priority-dot.low { background: var(--accent-emerald); }
 .task-delete { background: none; border: none; color: var(--accent-red); font-size: 16px; padding: 4px 8px; }
 .session-subject { font-size: 14px; font-weight: 600; }
 .session-minutes { color: var(--accent-cyan); font-weight: 700; font-size: 14px; }
@@ -184,7 +199,7 @@ body {
 
 .command-row label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .command-row input[type="date"] { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 10px; border-radius: 8px; font-size: 13px; }
-.command-stats { display: flex; gap: 20px; font-size: 13px; color: var(--text-secondary); }
+.command-stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
 .command-stats b { color: var(--accent-cyan); }
 
 .chapter-list { display: flex; flex-direction: column; gap: 12px; }
@@ -238,3 +253,45 @@ body {
 .session-chapter { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .session-meta { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
 .session-notes { font-size: 12px; color: var(--text-secondary); font-style: italic; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+  padding: 20px;
+  width: 100%;
+  max-width: 480px;
+}
+.modal-box h2 { font-size: 16px; margin: 0 0 14px; }
+.modal-box input[type="text"], .modal-box input[type="number"] {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.priority-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.priority-btn {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 10px 0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.priority-btn.active { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,152,0,0.12); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
