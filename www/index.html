@@ -19,6 +19,25 @@
   <main class="content">
 
     <section id="view-dashboard" class="view">
+
+      <section class="countdown-grid">
+        <div class="countdown-card">
+          <div class="countdown-value" id="daysMain">--</div>
+          <div class="countdown-label">Days to JEE Main</div>
+          <input type="date" id="examMainDate" class="date-mini">
+        </div>
+        <div class="countdown-card">
+          <div class="countdown-value accent-cyan" id="daysAdvanced">--</div>
+          <div class="countdown-label">Days to Advanced</div>
+          <input type="date" id="examAdvancedDate" class="date-mini">
+        </div>
+      </section>
+
+      <div class="section-header-row">
+        <h2>Today's Target &amp; Hours</h2>
+        <div class="goal-inline">Goal: <input type="number" id="goalHours" class="goal-input" min="0" step="0.5"> h/day</div>
+      </div>
+
       <section class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" id="todayHours">0.0h</div>
@@ -29,37 +48,42 @@
           <div class="stat-label">Total Logged Hours</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" id="taskCount">0/0</div>
-          <div class="stat-label">Tasks Done</div>
+          <div class="stat-value" id="productivityScore">-</div>
+          <div class="stat-label">Productivity Score</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value accent-cyan" id="chaptersDone">0/0</div>
+          <div class="stat-label">Chapters Done</div>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-header"><h2>Log Study Session</h2></div>
-        <form id="sessionForm" class="inline-form">
-          <select id="sessionSubject" required>
-            <option value="Physics">Physics</option>
-            <option value="Chemistry">Chemistry</option>
-            <option value="Mathematics">Mathematics</option>
-          </select>
-          <input type="number" id="sessionMinutes" placeholder="Minutes" min="1" required>
-          <button type="submit" class="btn-primary">Add</button>
-        </form>
+      <section class="insight-card">
+        <div class="insight-title">🤖 AI Academic Coach Insight</div>
+        <div class="insight-text" id="coachInsight">Log a study session to get your first insight.</div>
       </section>
 
       <section class="card">
-        <div class="card-header"><h2>Pending Tasks</h2></div>
+        <div class="card-header-row"><h2>Pending Tasks (<span id="pendingCount">0</span>)</h2></div>
         <form id="taskForm" class="inline-form">
           <input type="text" id="taskInput" placeholder="e.g. Solve 30 questions on Capacitance" required>
+          <input type="text" id="taskTag" placeholder="Type (optional)">
+          <input type="number" id="taskMinutes" placeholder="Mins" min="1">
+          <label class="urgent-label"><input type="checkbox" id="taskUrgent"> Urgent</label>
           <button type="submit" class="btn-primary">+ Add</button>
         </form>
         <ul id="taskList" class="task-list"></ul>
       </section>
 
       <section class="card">
-        <div class="card-header"><h2>Recent Study Logs</h2></div>
-        <ul id="sessionList" class="session-list"></ul>
+        <div class="card-header"><h2>Chapters In Progress</h2></div>
+        <div id="inProgressList" class="chapter-mini-list"></div>
       </section>
+
+      <section class="card attention-card">
+        <div class="card-header"><h2 class="attention-title">Attention Needed (Backlog &amp; Revisions)</h2></div>
+        <div id="attentionList" class="chapter-mini-list"></div>
+      </section>
+
     </section>
 
     <section id="view-syllabus" class="view" style="display:none;">
@@ -69,14 +93,22 @@
         <button class="subject-tab" data-subject="Mathematics">Mathematics</button>
       </div>
 
-      <section class="card">
-        <div class="card-header"><h2 id="subjectSummary">Physics — 0 of 0 chapters completed</h2></div>
+      <section class="card command-center">
+        <div class="card-header"><h2 id="commandTitle">Physics Command Center</h2></div>
+        <div class="command-row">
+          <label>Target Completion: <input type="date" id="subjectTarget"></label>
+        </div>
+        <div class="command-stats">
+          <span>Total Chapters: <b id="totalChapters">0</b></span>
+          <span>Completed: <b id="completedChapters">0</b></span>
+        </div>
       </section>
 
       <section class="card">
         <div class="card-header"><h2>Add Chapter</h2></div>
         <form id="chapterForm" class="inline-form">
           <input type="text" id="chapterName" placeholder="Chapter name" required>
+          <input type="text" id="chapterSubtopics" placeholder="Subtopics, comma separated">
           <input type="date" id="chapterTarget">
           <button type="submit" class="btn-primary">+ Add</button>
         </form>
@@ -85,12 +117,57 @@
       <div id="chapterList" class="chapter-list"></div>
     </section>
 
+    <section id="view-dailylog" class="view" style="display:none;">
+      <section class="card">
+        <div class="card-header"><h2>Log Today's Study Block</h2></div>
+
+        <div class="field-label">Select Subject</div>
+        <div class="subject-tabs" id="logSubjectTabs">
+          <button class="subject-tab active" data-subject="Physics">Physics</button>
+          <button class="subject-tab" data-subject="Chemistry">Chemistry</button>
+          <button class="subject-tab" data-subject="Mathematics">Mathematics</button>
+        </div>
+
+        <div class="field-label">Select Chapter</div>
+        <div id="logChapterChips" class="chip-row"></div>
+
+        <form id="sessionForm">
+          <div class="form-grid-2">
+            <div>
+              <div class="field-label">Time Spent (mins)</div>
+              <input type="number" id="sessionMinutes" min="1" required>
+            </div>
+            <div>
+              <div class="field-label">Questions Solved</div>
+              <input type="number" id="sessionQuestions" min="0">
+            </div>
+            <div>
+              <div class="field-label">Theory Pages</div>
+              <input type="number" id="sessionPages" min="0">
+            </div>
+            <div>
+              <div class="field-label">Productivity (1-10)</div>
+              <input type="number" id="sessionProductivity" min="1" max="10">
+            </div>
+          </div>
+          <div class="field-label">Session Notes</div>
+          <textarea id="sessionNotes" placeholder="Key insights, difficult numericals..."></textarea>
+          <button type="submit" class="btn-primary btn-block">✓ Record Study Block</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Recent Study Logs</h2></div>
+        <ul id="sessionList" class="session-list"></ul>
+      </section>
+    </section>
+
   </main>
 
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="dashboard">🏠<span>Dashboard</span></button>
     <button class="nav-item" data-tab="syllabus">📘<span>Syllabus</span></button>
-    <button class="nav-item" data-soon="1">🕐<span>Daily Log</span></button>
+    <button class="nav-item" data-tab="dailylog">🕐<span>Daily Log</span></button>
     <button class="nav-item" data-soon="1">📊<span>Tests</span></button>
     <button class="nav-item" data-soon="1">🤖<span>AI Coach</span></button>
     <button class="nav-item" data-soon="1">📈<span>Analytics</span></button>
@@ -100,4 +177,4 @@
 </div>
 <script src="app.js"></script>
 </body>
-</html>
+          </html>
