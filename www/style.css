@@ -162,7 +162,14 @@ body {
 .countdown-value { font-size: 28px; font-weight: 800; color: var(--accent-amber); }
 .countdown-value.accent-cyan { color: var(--accent-cyan); }
 .countdown-label { font-size: 12px; color: var(--text-secondary); margin: 4px 0 8px; }
-.date-mini { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 4px 6px; border-radius: 6px; width: 100%; }
+.date-mini { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 4px 6px; border-radius: 6px; }
+
+.phase-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 10px; flex-wrap: wrap; }
+.phase-row:last-child { border-bottom: none; }
+.phase-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.phase-dates { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+.phase-dates .date-mini { width: 128px; }
+.phase-status { font-size: 12px; font-weight: 700; color: var(--accent-cyan); white-space: nowrap; text-align: right; }
 
 .section-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .section-header-row h2 { font-size: 15px; margin: 0; }
@@ -227,7 +234,9 @@ body {
 .status-btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .status-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 6px 10px; border-radius: 8px; }
 .status-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(34,211,238,0.1); }
-.chapter-note-input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 10px; border-radius: 8px; font-size: 12px; }
+.chapter-note-input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
+.lecture-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.lecture-input { width: 50px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; text-align: center; }
 
 .field-label { font-size: 11px; color: var(--text-secondary); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
