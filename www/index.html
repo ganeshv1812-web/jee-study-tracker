@@ -133,7 +133,8 @@
         <form id="chapterForm" class="inline-form">
           <input type="text" id="chapterName" placeholder="Chapter name" required>
           <input type="text" id="chapterSubtopics" placeholder="Subtopics, comma separated">
-          <input type="date" id="chapterTarget">
+          <input type="date" id="chapterStartDate" title="Start date">
+          <input type="date" id="chapterTarget" title="Target date">
           <button type="submit" class="btn-primary">+ Add</button>
         </form>
       </section>
@@ -186,13 +187,34 @@
       </section>
     </section>
 
+    <section id="view-tests" class="view" style="display:none;">
+      <section class="card">
+        <div class="card-header"><h2>Aggregated Mistake Classification</h2></div>
+        <div class="mistake-grid">
+          <div class="mistake-item"><span>Conceptual Mistakes</span><b id="mistakeConceptual" class="mistake-red">0</b></div>
+          <div class="mistake-item"><span>Calculation Mistakes</span><b id="mistakeCalculation" class="mistake-amber">0</b></div>
+          <div class="mistake-item"><span>Silly / Read Errors</span><b id="mistakeSilly" class="mistake-cyan">0</b></div>
+          <div class="mistake-item"><span>Time Management Issues</span><b id="mistakeTime" class="mistake-emerald">0</b></div>
+          <div class="mistake-item"><span>Guessing Errors</span><b id="mistakeGuessing" class="mistake-text">0</b></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header-row">
+          <h2>Test History &amp; Performance</h2>
+          <button type="button" id="openTestModalBtn" class="btn-primary btn-small-add">+ Log Test</button>
+        </div>
+        <div id="testList" class="chapter-mini-list"></div>
+      </section>
+    </section>
+
   </main>
 
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="dashboard">🏠<span>Dashboard</span></button>
     <button class="nav-item" data-tab="syllabus">📘<span>Syllabus</span></button>
     <button class="nav-item" data-tab="dailylog">🕐<span>Daily Log</span></button>
-    <button class="nav-item" data-soon="1">📊<span>Tests</span></button>
+    <button class="nav-item" data-tab="tests">📊<span>Tests</span></button>
     <button class="nav-item" data-soon="1">🤖<span>AI Coach</span></button>
     <button class="nav-item" data-soon="1">📈<span>Analytics</span></button>
   </nav>
@@ -214,6 +236,41 @@
       <div class="modal-actions">
         <button type="button" id="cancelTaskBtn" class="btn-text">Cancel</button>
         <button type="button" id="saveTaskBtn" class="btn-primary">Save Task</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="testModalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-box modal-scrollable">
+      <h2>Log Test</h2>
+      <input type="text" id="modalTestName" placeholder="Test name (e.g. JEE Mains Full Mock 4)">
+      <div class="field-label">Type</div>
+      <select id="modalTestType">
+        <option value="Mock Test">Mock Test</option>
+        <option value="Part Test">Part Test</option>
+        <option value="Chapter Test">Chapter Test</option>
+      </select>
+      <div class="field-label">Date</div>
+      <input type="date" id="modalTestDate">
+      <div class="form-grid-2">
+        <div><div class="field-label">Total Marks</div><input type="number" id="modalTestTotalMarks" min="1"></div>
+        <div><div class="field-label">Marks Obtained</div><input type="number" id="modalTestMarksObtained" min="0"></div>
+        <div><div class="field-label">Accuracy (%)</div><input type="number" id="modalTestAccuracy" min="0" max="100"></div>
+        <div><div class="field-label">Time Taken (mins)</div><input type="number" id="modalTestTime" min="0"></div>
+      </div>
+      <div class="field-label">Chapters Covered</div>
+      <input type="text" id="modalTestChapters" placeholder="Comma separated chapter names">
+      <div class="field-label">Error Breakdown</div>
+      <div class="error-grid">
+        <div><label>Concept</label><input type="number" id="modalErrConceptual" min="0" value="0"></div>
+        <div><label>Calc</label><input type="number" id="modalErrCalculation" min="0" value="0"></div>
+        <div><label>Silly</label><input type="number" id="modalErrSilly" min="0" value="0"></div>
+        <div><label>Time</label><input type="number" id="modalErrTime" min="0" value="0"></div>
+        <div><label>Guess</label><input type="number" id="modalErrGuessing" min="0" value="0"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="cancelTestBtn" class="btn-text">Cancel</button>
+        <button type="button" id="saveTestBtn" class="btn-primary">Save Test</button>
       </div>
     </div>
   </div>
