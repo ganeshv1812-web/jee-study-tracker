@@ -18,7 +18,8 @@ var STORAGE_KEYS = {
   examDates: "jee_exam_dates",
   goalHours: "jee_goal_hours",
   subjectMeta: "jee_subject_meta",
-  phaseDates: "jee_phase_dates"
+  phaseDates: "jee_phase_dates",
+  tests: "jee_tests"
 };
 
 function loadData(key, fallback) {
@@ -54,7 +55,8 @@ var MATH_CHAPTERS = [
   "Limits, Continuity and Differentiability","Integral Calculus","Differential Equations",
   "Coordinate Geometry","Three Dimensional Geometry","Vector Algebra","Statistics and Probability","Trigonometry"
 ];
-var STATUSES = ["Not Started", "In Progress", "Completed", "Delayed", "Revision Due"];
+var STATUSES = ["Not Started", "In Progress", "Completed"];
+var REVISION_OFFSETS = [3, 7, 15, 30];
 var PRIORITY_WEIGHT = { High: 0, Medium: 1, Low: 2 };
 
 var tasks = loadData(STORAGE_KEYS.tasks, []);
@@ -64,6 +66,7 @@ var chapters = loadData(STORAGE_KEYS.chapters, []);
 var examDates = loadData(STORAGE_KEYS.examDates, { main: "", advanced: "" });
 var goalHours = loadData(STORAGE_KEYS.goalHours, null);
 var subjectMeta = loadData(STORAGE_KEYS.subjectMeta, { Physics: {}, Chemistry: {}, Mathematics: {} });
+var tests = loadData(STORAGE_KEYS.tests, []);
 
 function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 function fmtDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
@@ -97,7 +100,8 @@ var selectedModalPriority = "High";
 function makeChapter(subject, name) {
   return {
     id: subject + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
-    subject: subject, name: name, subtopics: [], target: "", progress: 0, status: "Not Started",
+    subject: subject, name: name, subtopics: [], startDate: "", target: "", completionDate: "",
+    progress: 0, status: "Not Started",
     revisions: [false, false, false, false], notes: "", lecturesDone: 0, lecturesTotal: 0
   };
 }
@@ -117,10 +121,12 @@ function seedChaptersIfNeeded() {
 }
 seedChaptersIfNeeded();
 
-// migrate older chapters that do not yet have lecture fields
 chapters.forEach(function (c) {
   if (typeof c.lecturesDone === "undefined") c.lecturesDone = 0;
   if (typeof c.lecturesTotal === "undefined") c.lecturesTotal = 0;
+  if (typeof c.startDate === "undefined") c.startDate = "";
+  if (typeof c.completionDate === "undefined") c.completionDate = "";
+  if (c.status === "Delayed" || c.status === "Revision Due") c.status = "In Progress";
 });
 saveData(STORAGE_KEYS.chapters, chapters);
 
@@ -147,6 +153,51 @@ function statusClass(status) {
   return map[status] || "status-not-started";
 }
 
+function parseDateStr(dateStr) {
+  if (!dateStr) return null;
+  var parts = dateStr.split("-");
+  if (parts.length !== 3) return null;
+  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+}
+function todayMidnight() {
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function computeDisplayStatus(ch) {
+  var today = todayMidnight();
+  if (ch.status === "Completed") {
+    if (ch.completionDate) {
+      var completionD = parseDateStr(ch.completionDate);
+      if (completionD) {
+        for (var i = 0; i < 4; i++) {
+          if (!ch.revisions[i]) {
+            var due = new Date(completionD);
+            due.setDate(due.getDate() + REVISION_OFFSETS[i]);
+            if (today >= due) return "Revision Due";
+          }
+        }
+      }
+    }
+    return "Completed";
+  }
+  if (ch.target) {
+    var targetD = parseDateStr(ch.target);
+    if (targetD && today > targetD) return "Delayed";
+  }
+  return ch.status;
+}
+
+function isRevisionOverdue(ch, index) {
+  if (ch.status !== "Completed" || !ch.completionDate || ch.revisions[index]) return false;
+  var completionD = parseDateStr(ch.completionDate);
+  if (!completionD) return false;
+  var due = new Date(completionD);
+  due.setDate(due.getDate() + REVISION_OFFSETS[index]);
+  return todayMidnight() >= due;
+}
+
 function updateStreak() {
   var today = todayStr();
   if (streak.lastDate === today) return;
@@ -157,18 +208,10 @@ function updateStreak() {
 }
 function renderStreak() { document.getElementById("streakCount").textContent = streak.count; }
 
-function parseDateStr(dateStr) {
-  if (!dateStr) return null;
-  var parts = dateStr.split("-");
-  if (parts.length !== 3) return null;
-  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-}
 function daysBetween(dateStr) {
   var target = parseDateStr(dateStr);
   if (!target) return null;
-  var now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.round((target - now) / 86400000);
+  return Math.round((target - todayMidnight()) / 86400000);
 }
 function renderCountdowns() {
   var mainDays = daysBetween(examDates.main);
@@ -178,32 +221,25 @@ function renderCountdowns() {
   document.getElementById("examMainDate").value = examDates.main || "";
   document.getElementById("examAdvancedDate").value = examDates.advanced || "";
 }
-function handleMainDateChange(e) {
+document.getElementById("examMainDate").addEventListener("change", function (e) {
   examDates.main = e.target.value;
   saveData(STORAGE_KEYS.examDates, examDates);
   renderCountdowns();
-}
-function handleAdvDateChange(e) {
+});
+document.getElementById("examAdvancedDate").addEventListener("change", function (e) {
   examDates.advanced = e.target.value;
   saveData(STORAGE_KEYS.examDates, examDates);
   renderCountdowns();
-}
-document.getElementById("examMainDate").addEventListener("change", handleMainDateChange);
-document.getElementById("examAdvancedDate").addEventListener("change", handleAdvDateChange);
+});
 
 function phaseStatusText(startStr, endStr) {
   var start = parseDateStr(startStr);
   var end = parseDateStr(endStr);
   if (!start || !end) return "--";
-  var now = new Date();
-  now.setHours(0, 0, 0, 0);
-  if (now < start) {
-    var untilStart = Math.round((start - now) / 86400000);
-    return "Starts in " + untilStart + "d";
-  }
+  var now = todayMidnight();
+  if (now < start) return "Starts in " + Math.round((start - now) / 86400000) + "d";
   if (now > end) return "Completed";
-  var daysLeft = Math.round((end - now) / 86400000);
-  return daysLeft + " days left";
+  return Math.round((end - now) / 86400000) + " days left";
 }
 function renderPhases() {
   document.getElementById("phase1Start").value = phaseDates.p1Start || "";
@@ -248,8 +284,9 @@ function renderInsight() {
   var el = document.getElementById("coachInsight");
   var today = todayStr();
   var todayMinutes = sessions.filter(function (s) { return s.date === today; }).reduce(function (sum, s) { return sum + s.minutes; }, 0);
-  var revisionDue = chapters.filter(function (c) { return c.status === "Revision Due"; });
-  var delayed = chapters.filter(function (c) { return c.status === "Delayed"; });
+  var withDisplay = chapters.map(function (c) { return { ch: c, displayStatus: computeDisplayStatus(c) }; });
+  var revisionDue = withDisplay.filter(function (x) { return x.displayStatus === "Revision Due"; });
+  var delayed = withDisplay.filter(function (x) { return x.displayStatus === "Delayed"; });
   var bySubjectProgress = {};
   ["Physics", "Chemistry", "Mathematics"].forEach(function (sub) {
     var subChapters = chapters.filter(function (c) { return c.subject === sub; });
@@ -266,18 +303,21 @@ function renderInsight() {
     ? "You have not logged any study time today yet."
     : ("You have studied " + (todayMinutes / 60).toFixed(1) + "h today."));
   if (streak.count > 0) parts.push("Your current streak is " + streak.count + " day" + (streak.count > 1 ? "s" : "") + ".");
-  if (delayed.length > 0) parts.push(delayed[0].name + " is delayed and needs attention.");
-  else if (revisionDue.length > 0) parts.push(revisionDue[0].name + " has a revision due.");
+  if (delayed.length > 0) parts.push(delayed[0].ch.name + " is delayed and needs attention.");
+  else if (revisionDue.length > 0) parts.push(revisionDue[0].ch.name + " has a revision due.");
   else if (weakest) parts.push(weakest + " has your lowest average progress, consider prioritizing it.");
   el.textContent = parts.join(" ");
 }
 
 function renderMiniChapterLists() {
-  var inProgress = chapters.filter(function (c) { return c.status === "In Progress"; });
+  var withDisplay = chapters.map(function (c) { return { ch: c, displayStatus: computeDisplayStatus(c) }; });
+
+  var inProgress = withDisplay.filter(function (x) { return x.displayStatus === "In Progress"; });
   var inProgressEl = document.getElementById("inProgressList");
   inProgressEl.innerHTML = inProgress.length === 0
     ? "<div class='empty'>No chapters in progress right now.</div>"
-    : inProgress.map(function (ch) {
+    : inProgress.map(function (x) {
+      var ch = x.ch;
       return "<div class='mini-chapter'>" +
         "<div class='mini-top'><span class='mini-name'>" + escapeHtml(ch.name) + "</span><span class='mini-percent'>" + ch.progress + "%</span></div>" +
         "<div class='progress-track'><div class='progress-fill' style='width:" + ch.progress + "%'></div></div>" +
@@ -285,14 +325,18 @@ function renderMiniChapterLists() {
         "</div>";
     }).join("");
 
-  var attention = chapters.filter(function (c) { return c.status === "Delayed" || c.status === "Revision Due"; });
+  var attention = withDisplay.filter(function (x) { return x.displayStatus === "Delayed" || x.displayStatus === "Revision Due"; });
   var attentionEl = document.getElementById("attentionList");
   attentionEl.innerHTML = attention.length === 0
     ? "<div class='empty'>Nothing needs attention right now.</div>"
-    : attention.map(function (ch) {
+    : attention.map(function (x) {
+      var ch = x.ch;
+      var note = x.displayStatus === "Delayed"
+        ? (ch.target ? "Target date was " + ch.target + ". Backlog recovery needed." : "Backlog recovery needed.")
+        : "Revision checkpoint overdue.";
       return "<div class='mini-chapter attention-item'>" +
-        "<div class='mini-top'><span class='mini-name'>" + escapeHtml(ch.name) + "</span><span class='mini-status " + statusClass(ch.status) + "'>" + ch.status + "</span></div>" +
-        "<div class='mini-note'>" + (ch.target ? "Target date was " + ch.target + ". " : "") + "Backlog recovery needed.</div>" +
+        "<div class='mini-top'><span class='mini-name'>" + escapeHtml(ch.name) + "</span><span class='mini-status " + statusClass(x.displayStatus) + "'>" + x.displayStatus + "</span></div>" +
+        "<div class='mini-note'>" + note + "</div>" +
         "</div>";
     }).join("");
 }
@@ -416,6 +460,7 @@ function renderChapters() {
     return;
   }
   list.innerHTML = filtered.map(function (ch) {
+    var displayStatus = computeDisplayStatus(ch);
     var subtopicsHtml = (ch.subtopics && ch.subtopics.length)
       ? "<div class='subtopics-row'>" + ch.subtopics.map(function (s) { return "<span>&bull; " + escapeHtml(s) + "</span>"; }).join(" ") + "</div>" : "";
     return "<div class='chapter-card'>" +
@@ -424,10 +469,14 @@ function renderChapters() {
       "<button class='chapter-delete' data-id='" + ch.id + "'>&#10005;</button>" +
       "</div>" +
       "<div class='chapter-meta'>" +
-      "<span class='status-badge " + statusClass(ch.status) + "'>" + ch.status + "</span>" +
-      (ch.target ? "<span class='chapter-target'>Target: " + ch.target + "</span>" : "") +
+      "<span class='status-badge " + statusClass(displayStatus) + "'>" + displayStatus + "</span>" +
       "</div>" +
       subtopicsHtml +
+      "<div class='date-fields-row'>" +
+      "<label class='date-field'>Start<input type='date' class='chapter-start-input' data-id='" + ch.id + "' value='" + (ch.startDate || "") + "'></label>" +
+      "<label class='date-field'>Target<input type='date' class='chapter-target-input' data-id='" + ch.id + "' value='" + (ch.target || "") + "'></label>" +
+      "</div>" +
+      (ch.completionDate ? "<div class='completion-note'>Completed on " + ch.completionDate + "</div>" : "") +
       "<div class='progress-track'><div class='progress-fill' style='width:" + ch.progress + "%'></div></div>" +
       "<div class='progress-row'>" +
       "<input type='range' class='progress-slider' data-id='" + ch.id + "' min='0' max='100' value='" + ch.progress + "'>" +
@@ -441,7 +490,8 @@ function renderChapters() {
       "</div>" +
       "<div class='revision-row'>" +
       [0, 1, 2, 3].map(function (i) {
-        return "<button class='revision-chip " + (ch.revisions[i] ? "done" : "") + "' data-id='" + ch.id + "' data-rev='" + i + "'>R" + (i + 1) + "</button>";
+        var cls = "revision-chip" + (ch.revisions[i] ? " done" : "") + (isRevisionOverdue(ch, i) ? " overdue" : "");
+        return "<button class='" + cls + "' data-id='" + ch.id + "' data-rev='" + i + "'>R" + (i + 1) + "</button>";
       }).join("") +
       "</div>" +
       "<div class='status-btn-row'>" +
@@ -458,18 +508,20 @@ document.getElementById("chapterForm").addEventListener("submit", function (e) {
   e.preventDefault();
   var nameInput = document.getElementById("chapterName");
   var subtopicsInput = document.getElementById("chapterSubtopics");
+  var startInput = document.getElementById("chapterStartDate");
   var targetInput = document.getElementById("chapterTarget");
   var name = nameInput.value.trim();
   if (!name) return;
   var subtopics = subtopicsInput.value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   chapters.push({
     id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
-    subject: currentSubject, name: name, subtopics: subtopics, target: targetInput.value || "",
+    subject: currentSubject, name: name, subtopics: subtopics,
+    startDate: startInput.value || "", target: targetInput.value || "", completionDate: "",
     progress: 0, status: "Not Started", revisions: [false, false, false, false], notes: "",
     lecturesDone: 0, lecturesTotal: 0
   });
   saveData(STORAGE_KEYS.chapters, chapters);
-  nameInput.value = ""; subtopicsInput.value = ""; targetInput.value = "";
+  nameInput.value = ""; subtopicsInput.value = ""; startInput.value = ""; targetInput.value = "";
   renderChapters();
   renderStats();
 });
@@ -487,7 +539,10 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
     var ch2 = chapters.find(function (c) { return c.id === statusBtn.dataset.id; });
     if (ch2) {
       ch2.status = statusBtn.dataset.status;
-      if (ch2.status === "Completed") ch2.progress = 100;
+      if (ch2.status === "Completed") {
+        ch2.progress = 100;
+        if (!ch2.completionDate) ch2.completionDate = todayStr();
+      }
     }
   } else { return; }
   saveData(STORAGE_KEYS.chapters, chapters);
@@ -501,7 +556,6 @@ document.getElementById("chapterList").addEventListener("input", function (e) {
     var ch = chapters.find(function (c) { return c.id === e.target.dataset.id; });
     if (ch) {
       ch.progress = parseInt(e.target.value, 10);
-      if (ch.progress === 100 && ch.status !== "Completed") ch.status = "Completed";
       var card = e.target.closest(".chapter-card");
       card.querySelector(".progress-fill").style.width = ch.progress + "%";
       card.querySelector(".progress-label").textContent = ch.progress + "%";
@@ -510,20 +564,41 @@ document.getElementById("chapterList").addEventListener("input", function (e) {
 });
 document.getElementById("chapterList").addEventListener("change", function (e) {
   if (e.target.classList.contains("progress-slider")) {
+    var ch = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (ch && ch.progress === 100 && ch.status !== "Completed") {
+      ch.status = "Completed";
+      if (!ch.completionDate) ch.completionDate = todayStr();
+    }
     saveData(STORAGE_KEYS.chapters, chapters);
     renderChapters(); renderMiniChapterLists(); renderStats(); renderInsight();
   }
   if (e.target.classList.contains("chapter-note-input")) {
-    var ch = chapters.find(function (c) { return c.id === e.target.dataset.id; });
-    if (ch) { ch.notes = e.target.value; saveData(STORAGE_KEYS.chapters, chapters); renderMiniChapterLists(); }
+    var chN = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chN) { chN.notes = e.target.value; saveData(STORAGE_KEYS.chapters, chapters); renderMiniChapterLists(); }
+  }
+  if (e.target.classList.contains("chapter-start-input")) {
+    var chS = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chS) {
+      chS.startDate = e.target.value;
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists(); renderInsight();
+    }
+  }
+  if (e.target.classList.contains("chapter-target-input")) {
+    var chT = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chT) {
+      chT.target = e.target.value;
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists(); renderInsight();
+    }
   }
   if (e.target.classList.contains("lecture-done-input") || e.target.classList.contains("lecture-total-input")) {
-    var ch2 = chapters.find(function (c) { return c.id === e.target.dataset.id; });
-    if (ch2) {
+    var chL = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chL) {
       var val = parseInt(e.target.value, 10);
       if (isNaN(val) || val < 0) val = 0;
-      if (e.target.classList.contains("lecture-done-input")) ch2.lecturesDone = val;
-      else ch2.lecturesTotal = val;
+      if (e.target.classList.contains("lecture-done-input")) chL.lecturesDone = val;
+      else chL.lecturesTotal = val;
       saveData(STORAGE_KEYS.chapters, chapters);
     }
   }
@@ -617,6 +692,100 @@ document.getElementById("sessionForm").addEventListener("submit", function (e) {
   showToast("Study session logged");
 });
 
+function renderMistakeClassification() {
+  var totals = { conceptual: 0, calculation: 0, silly: 0, time: 0, guessing: 0 };
+  tests.forEach(function (t) {
+    totals.conceptual += t.errConceptual || 0;
+    totals.calculation += t.errCalculation || 0;
+    totals.silly += t.errSilly || 0;
+    totals.time += t.errTime || 0;
+    totals.guessing += t.errGuessing || 0;
+  });
+  document.getElementById("mistakeConceptual").textContent = totals.conceptual;
+  document.getElementById("mistakeCalculation").textContent = totals.calculation;
+  document.getElementById("mistakeSilly").textContent = totals.silly;
+  document.getElementById("mistakeTime").textContent = totals.time;
+  document.getElementById("mistakeGuessing").textContent = totals.guessing;
+}
+
+function renderTests() {
+  renderMistakeClassification();
+  var list = document.getElementById("testList");
+  if (tests.length === 0) {
+    list.innerHTML = "<div class='empty'>No tests logged yet.</div>";
+    return;
+  }
+  list.innerHTML = tests.slice().reverse().map(function (t) {
+    var pct = t.totalMarks > 0 ? ((t.marksObtained / t.totalMarks) * 100).toFixed(1) : "0.0";
+    return "<div class='test-card'>" +
+      "<div class='test-top'>" +
+      "<span class='test-name'>" + escapeHtml(t.name) + "</span>" +
+      "<span class='test-score'>" + t.marksObtained + "/" + t.totalMarks + " (" + pct + "%)</span>" +
+      "</div>" +
+      "<div class='test-meta'>" +
+      "<span class='test-type-tag'>" + escapeHtml(t.type) + "</span>" +
+      "<span>" + t.date + "</span>" +
+      (t.accuracy ? "<span>Accuracy: " + t.accuracy + "%</span>" : "") +
+      (t.timeTaken ? "<span>" + t.timeTaken + " mins</span>" : "") +
+      "</div>" +
+      (t.chaptersCovered ? "<div class='session-meta'>" + escapeHtml(t.chaptersCovered) + "</div>" : "") +
+      "<div class='test-error-chips'>" +
+      "<span class='test-error-chip'>Concept: " + (t.errConceptual || 0) + "</span>" +
+      "<span class='test-error-chip'>Calc: " + (t.errCalculation || 0) + "</span>" +
+      "<span class='test-error-chip'>Silly: " + (t.errSilly || 0) + "</span>" +
+      "<span class='test-error-chip'>Time: " + (t.errTime || 0) + "</span>" +
+      "<span class='test-error-chip'>Guess: " + (t.errGuessing || 0) + "</span>" +
+      "</div>" +
+      "</div>";
+  }).join("");
+}
+
+var testModalOverlay = document.getElementById("testModalOverlay");
+document.getElementById("openTestModalBtn").addEventListener("click", function () {
+  document.getElementById("modalTestName").value = "";
+  document.getElementById("modalTestType").value = "Mock Test";
+  document.getElementById("modalTestDate").value = todayStr();
+  document.getElementById("modalTestTotalMarks").value = "";
+  document.getElementById("modalTestMarksObtained").value = "";
+  document.getElementById("modalTestAccuracy").value = "";
+  document.getElementById("modalTestTime").value = "";
+  document.getElementById("modalTestChapters").value = "";
+  document.getElementById("modalErrConceptual").value = "0";
+  document.getElementById("modalErrCalculation").value = "0";
+  document.getElementById("modalErrSilly").value = "0";
+  document.getElementById("modalErrTime").value = "0";
+  document.getElementById("modalErrGuessing").value = "0";
+  testModalOverlay.style.display = "flex";
+});
+document.getElementById("cancelTestBtn").addEventListener("click", function () {
+  testModalOverlay.style.display = "none";
+});
+document.getElementById("saveTestBtn").addEventListener("click", function () {
+  var name = document.getElementById("modalTestName").value.trim();
+  var totalMarks = parseInt(document.getElementById("modalTestTotalMarks").value, 10);
+  if (!name || !totalMarks) return;
+  tests.push({
+    id: Date.now().toString(),
+    name: name,
+    type: document.getElementById("modalTestType").value,
+    date: document.getElementById("modalTestDate").value || todayStr(),
+    totalMarks: totalMarks,
+    marksObtained: parseInt(document.getElementById("modalTestMarksObtained").value, 10) || 0,
+    accuracy: parseInt(document.getElementById("modalTestAccuracy").value, 10) || 0,
+    timeTaken: parseInt(document.getElementById("modalTestTime").value, 10) || 0,
+    chaptersCovered: document.getElementById("modalTestChapters").value.trim(),
+    errConceptual: parseInt(document.getElementById("modalErrConceptual").value, 10) || 0,
+    errCalculation: parseInt(document.getElementById("modalErrCalculation").value, 10) || 0,
+    errSilly: parseInt(document.getElementById("modalErrSilly").value, 10) || 0,
+    errTime: parseInt(document.getElementById("modalErrTime").value, 10) || 0,
+    errGuessing: parseInt(document.getElementById("modalErrGuessing").value, 10) || 0
+  });
+  saveData(STORAGE_KEYS.tests, tests);
+  testModalOverlay.style.display = "none";
+  renderTests();
+  showToast("Test logged");
+});
+
 document.querySelectorAll(".nav-item").forEach(function (btn) {
   btn.addEventListener("click", function () {
     if (btn.dataset.soon) { showToast("Coming in the next build phase"); return; }
@@ -628,6 +797,7 @@ document.querySelectorAll(".nav-item").forEach(function (btn) {
     document.getElementById("view-" + tab).style.display = "";
     if (tab === "syllabus") renderChapters();
     if (tab === "dailylog") renderLogChapterChips();
+    if (tab === "tests") renderTests();
   });
 });
 
