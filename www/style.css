@@ -221,22 +221,26 @@ body {
 .status-completed { color: var(--accent-emerald); border-color: var(--accent-emerald); }
 .status-delayed { color: var(--accent-red); border-color: var(--accent-red); }
 .status-revision { color: var(--accent-amber); border-color: var(--accent-amber); }
-.chapter-target { font-size: 11px; color: var(--text-secondary); }
 .subtopics-row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; }
 .progress-track { background: var(--surface-2); border-radius: 999px; height: 8px; overflow: hidden; margin-bottom: 4px; }
 .progress-fill { background: var(--accent-amber); height: 100%; border-radius: 999px; }
 .progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .progress-slider { flex: 1; accent-color: var(--accent-amber); }
 .progress-label { font-size: 11px; color: var(--text-secondary); }
+.date-fields-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.date-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary); flex: 1; min-width: 120px; }
+.date-field input { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; }
+.completion-note { font-size: 11px; color: var(--accent-emerald); margin-bottom: 10px; }
+.lecture-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.lecture-input { width: 50px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; text-align: center; }
 .revision-row { display: flex; gap: 8px; margin-bottom: 10px; }
 .revision-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; }
 .revision-chip.done { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,152,0,0.12); }
+.revision-chip.overdue { border-color: var(--accent-red); color: var(--accent-red); background: rgba(239,68,68,0.12); }
 .status-btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .status-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 6px 10px; border-radius: 8px; }
 .status-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(34,211,238,0.1); }
 .chapter-note-input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
-.lecture-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
-.lecture-input { width: 50px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; text-align: center; }
 
 .field-label { font-size: 11px; color: var(--text-secondary); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -263,6 +267,24 @@ body {
 .session-meta { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
 .session-notes { font-size: 12px; color: var(--text-secondary); font-style: italic; }
 
+.mistake-grid { display: flex; flex-direction: column; gap: 10px; }
+.mistake-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-secondary); background: var(--surface-2); padding: 10px 12px; border-radius: 10px; }
+.mistake-item b { font-size: 14px; }
+.mistake-red { color: var(--accent-red); }
+.mistake-amber { color: var(--accent-amber); }
+.mistake-cyan { color: var(--accent-cyan); }
+.mistake-emerald { color: var(--accent-emerald); }
+.mistake-text { color: var(--text-primary); }
+
+.test-card { background: var(--surface-2); border-radius: 10px; padding: 12px; }
+.test-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.test-name { font-size: 14px; font-weight: 700; }
+.test-score { font-size: 14px; font-weight: 700; color: var(--accent-amber); }
+.test-meta { font-size: 11px; color: var(--text-secondary); display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.test-type-tag { background: rgba(34,211,238,0.12); color: var(--accent-cyan); padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+.test-error-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.test-error-chip { background: var(--surface); border: 1px solid var(--border); font-size: 10px; padding: 3px 8px; border-radius: 8px; color: var(--text-secondary); }
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -280,8 +302,9 @@ body {
   width: 100%;
   max-width: 480px;
 }
+.modal-scrollable { max-height: 85vh; overflow-y: auto; }
 .modal-box h2 { font-size: 16px; margin: 0 0 14px; }
-.modal-box input[type="text"], .modal-box input[type="number"] {
+.modal-box input[type="text"], .modal-box input[type="number"], .modal-box select {
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -304,3 +327,6 @@ body {
 }
 .priority-btn.active { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,152,0,0.12); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+.error-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 6px; }
+.error-grid label { font-size: 9px; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 2px; }
+.error-grid input { padding: 8px 2px !important; text-align: center; font-size: 12px; }
