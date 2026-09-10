@@ -20,6 +20,22 @@ body {
   padding-bottom: 76px;
 }
 #app { max-width: 900px; margin: 0 auto; }
+
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  background: #000000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+  transition: opacity 0.5s ease;
+}
+.splash-screen.hide { opacity: 0; pointer-events: none; }
+.splash-logo { width: 120px; height: 120px; border-radius: 24px; margin-bottom: 18px; }
+.splash-tagline { color: var(--accent-amber); font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+
 .error-banner {
   position: fixed;
   top: 0; left: 0; right: 0;
@@ -97,8 +113,19 @@ body {
   font-weight: 700;
   font-size: 14px;
 }
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.btn-secondary:disabled, .btn-primary:disabled { opacity: 0.4; }
 .btn-text { background: none; border: none; color: var(--text-secondary); font-weight: 600; font-size: 14px; padding: 10px 16px; }
 .btn-block { width: 100%; margin-top: 10px; padding: 14px; font-size: 15px; }
+.btn-outline { background: none; border: 1px solid var(--accent-cyan); color: var(--accent-cyan); }
 .task-list, .session-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .task-item {
   display: flex;
@@ -154,6 +181,8 @@ body {
   opacity: 0;
   transition: all 0.25s ease;
   pointer-events: none;
+  max-width: 85%;
+  text-align: center;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -260,6 +289,12 @@ body {
   margin-bottom: 4px;
 }
 #view-dailylog textarea { min-height: 70px; resize: vertical; }
+
+.timer-display { font-size: 40px; font-weight: 800; text-align: center; color: var(--accent-amber); font-variant-numeric: tabular-nums; margin-bottom: 14px; }
+.timer-controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
+.pomodoro-mode { text-align: center; font-size: 12px; color: var(--accent-cyan); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.pomodoro-count { text-align: center; font-size: 12px; color: var(--text-secondary); }
+.pomodoro-count b { color: var(--accent-amber); }
 
 .session-item-full { background: var(--surface-2); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
 .session-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
