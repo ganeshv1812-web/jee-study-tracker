@@ -9,6 +9,14 @@ window.onerror = function (message, source, lineno, colno, error) {
 
 try {
 
+var splashEl = document.getElementById("splashScreen");
+setTimeout(function () {
+  if (splashEl) {
+    splashEl.classList.add("hide");
+    setTimeout(function () { if (splashEl && splashEl.parentNode) splashEl.parentNode.removeChild(splashEl); }, 600);
+  }
+}, 1600);
+
 var STORAGE_KEYS = {
   tasks: "jee_tasks",
   sessions: "jee_sessions",
@@ -19,7 +27,8 @@ var STORAGE_KEYS = {
   goalHours: "jee_goal_hours",
   subjectMeta: "jee_subject_meta",
   phaseDates: "jee_phase_dates",
-  tests: "jee_tests"
+  tests: "jee_tests",
+  pomodoroCount: "jee_pomodoro_count"
 };
 
 function loadData(key, fallback) {
@@ -67,6 +76,7 @@ var examDates = loadData(STORAGE_KEYS.examDates, { main: "", advanced: "" });
 var goalHours = loadData(STORAGE_KEYS.goalHours, null);
 var subjectMeta = loadData(STORAGE_KEYS.subjectMeta, { Physics: {}, Chemistry: {}, Mathematics: {} });
 var tests = loadData(STORAGE_KEYS.tests, []);
+var pomodoroCountData = loadData(STORAGE_KEYS.pomodoroCount, { date: "", count: 0 });
 
 function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 function fmtDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
@@ -130,13 +140,19 @@ chapters.forEach(function (c) {
 });
 saveData(STORAGE_KEYS.chapters, chapters);
 
+tasks.forEach(function (t) {
+  if (typeof t.subject === "undefined") t.subject = "";
+  if (typeof t.loggedSessionId === "undefined") t.loggedSessionId = null;
+});
+saveData(STORAGE_KEYS.tasks, tasks);
+
 function todayStr() { return fmtDate(new Date()); }
 
 function showToast(msg) {
   var toast = document.getElementById("toast");
   toast.textContent = msg;
   toast.classList.add("show");
-  setTimeout(function () { toast.classList.remove("show"); }, 2000);
+  setTimeout(function () { toast.classList.remove("show"); }, 2200);
 }
 
 function escapeHtml(str) {
@@ -341,6 +357,20 @@ function renderMiniChapterLists() {
     }).join("");
 }
 
+function escalatePendingTaskPriorities() {
+  var now = Date.now();
+  var changed = false;
+  tasks.forEach(function (t) {
+    if (t.done) return;
+    var created = parseInt(t.id, 10);
+    if (isNaN(created)) return;
+    var ageDays = Math.floor((now - created) / 86400000);
+    if (ageDays >= 4 && t.priority !== "High") { t.priority = "High"; changed = true; }
+    else if (ageDays >= 2 && t.priority === "Low") { t.priority = "Medium"; changed = true; }
+  });
+  if (changed) saveData(STORAGE_KEYS.tasks, tasks);
+}
+
 function sortedTasks() {
   var pending = tasks.filter(function (t) { return !t.done; });
   var done = tasks.filter(function (t) { return t.done; });
@@ -360,7 +390,7 @@ function priorityDotClass(priority) {
 
 function renderTasks() {
   var pendingCount = tasks.filter(function (t) { return !t.done; }).length;
-  document.getElementById("pendingCount").textContent = pendingCount;
+  document.getElementById("todoCount").textContent = pendingCount;
   var list = document.getElementById("taskList");
   if (tasks.length === 0) {
     list.innerHTML = "<li class='empty'>No tasks yet. Tap + Add Task above.</li>";
@@ -369,6 +399,7 @@ function renderTasks() {
   var ordered = sortedTasks();
   list.innerHTML = ordered.map(function (task) {
     var metaBits = [];
+    if (task.subject) metaBits.push("<span>" + escapeHtml(task.subject) + "</span>");
     if (task.priority) metaBits.push("<span>" + escapeHtml(task.priority) + "</span>");
     if (task.minutes) metaBits.push("<span>" + task.minutes + " mins</span>");
     return "<li class='task-item" + (task.done ? " done" : "") + "'>" +
@@ -392,7 +423,29 @@ document.getElementById("taskList").addEventListener("click", function (e) {
   var delBtn = e.target.closest(".task-delete");
   if (cb) {
     var task = tasks.find(function (t) { return t.id === cb.dataset.id; });
-    if (task) task.done = cb.checked;
+    if (task) {
+      var wasDone = task.done;
+      task.done = cb.checked;
+      if (task.done && !wasDone) {
+        var newSession = {
+          id: Date.now().toString(), subject: task.subject || "General",
+          chapterId: null, chapterName: task.text,
+          minutes: task.minutes || 0, questions: 0, pages: 0, productivity: 0,
+          notes: "Auto-logged from completed task.", date: todayStr()
+        };
+        sessions.push(newSession);
+        task.loggedSessionId = newSession.id;
+        saveData(STORAGE_KEYS.sessions, sessions);
+        updateStreak();
+        renderSessions(); renderStats(); renderStreak(); renderInsight();
+        showToast("Task completed and logged to Daily Log");
+      } else if (!task.done && wasDone && task.loggedSessionId) {
+        sessions = sessions.filter(function (s) { return s.id !== task.loggedSessionId; });
+        task.loggedSessionId = null;
+        saveData(STORAGE_KEYS.sessions, sessions);
+        renderSessions(); renderStats(); renderInsight();
+      }
+    }
     saveData(STORAGE_KEYS.tasks, tasks);
     renderTasks();
   } else if (delBtn) {
@@ -405,6 +458,7 @@ document.getElementById("taskList").addEventListener("click", function (e) {
 var taskModalOverlay = document.getElementById("taskModalOverlay");
 document.getElementById("openTaskModalBtn").addEventListener("click", function () {
   document.getElementById("modalTaskInput").value = "";
+  document.getElementById("modalTaskSubject").value = "";
   document.getElementById("modalTaskMinutes").value = "60";
   selectedModalPriority = "High";
   document.querySelectorAll(".priority-btn").forEach(function (b) {
@@ -424,12 +478,13 @@ document.querySelectorAll(".priority-btn").forEach(function (btn) {
 });
 document.getElementById("saveTaskBtn").addEventListener("click", function () {
   var textInput = document.getElementById("modalTaskInput");
+  var subjectInput = document.getElementById("modalTaskSubject");
   var minutesInput = document.getElementById("modalTaskMinutes");
   var text = textInput.value.trim();
   if (!text) return;
   tasks.push({
-    id: Date.now().toString(), text: text, priority: selectedModalPriority,
-    minutes: parseInt(minutesInput.value, 10) || 0, done: false
+    id: Date.now().toString(), text: text, subject: subjectInput.value, priority: selectedModalPriority,
+    minutes: parseInt(minutesInput.value, 10) || 0, done: false, loggedSessionId: null
   });
   saveData(STORAGE_KEYS.tasks, tasks);
   taskModalOverlay.style.display = "none";
@@ -692,6 +747,123 @@ document.getElementById("sessionForm").addEventListener("submit", function (e) {
   showToast("Study session logged");
 });
 
+var stopwatchRunning = false;
+var stopwatchStart = 0;
+var stopwatchAccumulated = 0;
+var stopwatchInterval = null;
+
+function formatStopwatch(ms) {
+  var totalSeconds = Math.floor(ms / 1000);
+  var h = Math.floor(totalSeconds / 3600);
+  var m = Math.floor((totalSeconds % 3600) / 60);
+  var s = totalSeconds % 60;
+  return pad2(h) + ":" + pad2(m) + ":" + pad2(s);
+}
+function updateStopwatchDisplay() {
+  var elapsed = stopwatchAccumulated + (stopwatchRunning ? (Date.now() - stopwatchStart) : 0);
+  document.getElementById("stopwatchDisplay").textContent = formatStopwatch(elapsed);
+}
+document.getElementById("stopwatchStartBtn").addEventListener("click", function () {
+  if (stopwatchRunning) return;
+  stopwatchRunning = true;
+  stopwatchStart = Date.now();
+  stopwatchInterval = setInterval(updateStopwatchDisplay, 500);
+  document.getElementById("stopwatchStartBtn").disabled = true;
+  document.getElementById("stopwatchPauseBtn").disabled = false;
+});
+document.getElementById("stopwatchPauseBtn").addEventListener("click", function () {
+  if (!stopwatchRunning) return;
+  stopwatchAccumulated += Date.now() - stopwatchStart;
+  stopwatchRunning = false;
+  clearInterval(stopwatchInterval);
+  updateStopwatchDisplay();
+  document.getElementById("stopwatchStartBtn").disabled = false;
+  document.getElementById("stopwatchPauseBtn").disabled = true;
+});
+document.getElementById("stopwatchResetBtn").addEventListener("click", function () {
+  stopwatchRunning = false;
+  stopwatchAccumulated = 0;
+  clearInterval(stopwatchInterval);
+  updateStopwatchDisplay();
+  document.getElementById("stopwatchStartBtn").disabled = false;
+  document.getElementById("stopwatchPauseBtn").disabled = true;
+});
+document.getElementById("stopwatchUseBtn").addEventListener("click", function () {
+  var elapsedMs = stopwatchAccumulated + (stopwatchRunning ? (Date.now() - stopwatchStart) : 0);
+  var mins = Math.round(elapsedMs / 60000);
+  if (mins < 1) mins = 1;
+  document.getElementById("sessionMinutes").value = mins;
+  showToast("Stopwatch time applied: " + mins + " mins");
+});
+
+var pomodoroRunning = false;
+var pomodoroInterval = null;
+var pomodoroMode = "work";
+var pomodoroWorkSeconds = 25 * 60;
+var pomodoroBreakSeconds = 5 * 60;
+var pomodoroRemaining = pomodoroWorkSeconds;
+
+function formatPomodoro(totalSeconds) {
+  var m = Math.floor(totalSeconds / 60);
+  var s = totalSeconds % 60;
+  return pad2(m) + ":" + pad2(s);
+}
+function updatePomodoroDisplay() {
+  document.getElementById("pomodoroDisplay").textContent = formatPomodoro(pomodoroRemaining);
+  document.getElementById("pomodoroMode").textContent = pomodoroMode === "work" ? "Work Session" : "Break";
+}
+function ensurePomodoroCountToday() {
+  if (pomodoroCountData.date !== todayStr()) {
+    pomodoroCountData = { date: todayStr(), count: 0 };
+    saveData(STORAGE_KEYS.pomodoroCount, pomodoroCountData);
+  }
+}
+function renderPomodoroCount() {
+  ensurePomodoroCountToday();
+  document.getElementById("pomodoroCount").textContent = pomodoroCountData.count;
+}
+function pomodoroTick() {
+  pomodoroRemaining -= 1;
+  if (pomodoroRemaining <= 0) {
+    if (pomodoroMode === "work") {
+      ensurePomodoroCountToday();
+      pomodoroCountData.count += 1;
+      saveData(STORAGE_KEYS.pomodoroCount, pomodoroCountData);
+      renderPomodoroCount();
+      showToast("Work session complete. Time for a break.");
+      pomodoroMode = "break";
+      pomodoroRemaining = pomodoroBreakSeconds;
+    } else {
+      showToast("Break over. Back to work.");
+      pomodoroMode = "work";
+      pomodoroRemaining = pomodoroWorkSeconds;
+    }
+  }
+  updatePomodoroDisplay();
+}
+document.getElementById("pomodoroStartBtn").addEventListener("click", function () {
+  if (pomodoroRunning) return;
+  pomodoroRunning = true;
+  pomodoroInterval = setInterval(pomodoroTick, 1000);
+  document.getElementById("pomodoroStartBtn").disabled = true;
+  document.getElementById("pomodoroPauseBtn").disabled = false;
+});
+document.getElementById("pomodoroPauseBtn").addEventListener("click", function () {
+  pomodoroRunning = false;
+  clearInterval(pomodoroInterval);
+  document.getElementById("pomodoroStartBtn").disabled = false;
+  document.getElementById("pomodoroPauseBtn").disabled = true;
+});
+document.getElementById("pomodoroResetBtn").addEventListener("click", function () {
+  pomodoroRunning = false;
+  clearInterval(pomodoroInterval);
+  pomodoroMode = "work";
+  pomodoroRemaining = pomodoroWorkSeconds;
+  updatePomodoroDisplay();
+  document.getElementById("pomodoroStartBtn").disabled = false;
+  document.getElementById("pomodoroPauseBtn").disabled = true;
+});
+
 function renderMistakeClassification() {
   var totals = { conceptual: 0, calculation: 0, silly: 0, time: 0, guessing: 0 };
   tests.forEach(function (t) {
@@ -796,14 +968,16 @@ document.querySelectorAll(".nav-item").forEach(function (btn) {
     document.querySelectorAll(".view").forEach(function (v) { v.style.display = "none"; });
     document.getElementById("view-" + tab).style.display = "";
     if (tab === "syllabus") renderChapters();
-    if (tab === "dailylog") renderLogChapterChips();
+    if (tab === "dailylog") { renderLogChapterChips(); updateStopwatchDisplay(); updatePomodoroDisplay(); renderPomodoroCount(); }
     if (tab === "tests") renderTests();
   });
 });
 
 function renderAll() {
+  escalatePendingTaskPriorities();
   renderStreak(); renderCountdowns(); renderPhases(); renderGoal(); renderStats();
   renderInsight(); renderTasks(); renderMiniChapterLists(); renderSessions();
+  updateStopwatchDisplay(); updatePomodoroDisplay(); renderPomodoroCount();
 }
 renderAll();
 renderChapters();
@@ -815,4 +989,4 @@ renderLogChapterChips();
     banner.style.display = "block";
     banner.textContent = "App error: " + err.message;
   }
-}
+    }
