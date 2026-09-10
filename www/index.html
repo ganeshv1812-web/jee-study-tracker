@@ -7,6 +7,10 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="splashScreen" class="splash-screen">
+  <img src="logo.png" class="splash-logo" alt="JEE Study Tracker">
+  <div class="splash-tagline">Learn &bull; Practice &bull; Achieve</div>
+</div>
 <div id="errorBanner" class="error-banner" style="display:none;"></div>
 <div id="app">
   <header class="topbar">
@@ -91,7 +95,7 @@
 
       <section class="card">
         <div class="card-header-row">
-          <h2>Pending Tasks (<span id="pendingCount">0</span>)</h2>
+          <h2>To-Do Today (<span id="todoCount">0</span>)</h2>
           <button type="button" id="openTaskModalBtn" class="btn-primary btn-small-add">+ Add Task</button>
         </div>
         <ul id="taskList" class="task-list"></ul>
@@ -143,6 +147,30 @@
     </section>
 
     <section id="view-dailylog" class="view" style="display:none;">
+
+      <section class="card">
+        <div class="card-header"><h2>Stopwatch</h2></div>
+        <div class="timer-display" id="stopwatchDisplay">00:00:00</div>
+        <div class="timer-controls">
+          <button type="button" id="stopwatchStartBtn" class="btn-primary">Start</button>
+          <button type="button" id="stopwatchPauseBtn" class="btn-secondary" disabled>Pause</button>
+          <button type="button" id="stopwatchResetBtn" class="btn-text">Reset</button>
+        </div>
+        <button type="button" id="stopwatchUseBtn" class="btn-block btn-outline">Use This Time in Log Below</button>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Pomodoro Timer</h2></div>
+        <div class="pomodoro-mode" id="pomodoroMode">Work Session</div>
+        <div class="timer-display" id="pomodoroDisplay">25:00</div>
+        <div class="timer-controls">
+          <button type="button" id="pomodoroStartBtn" class="btn-primary">Start</button>
+          <button type="button" id="pomodoroPauseBtn" class="btn-secondary" disabled>Pause</button>
+          <button type="button" id="pomodoroResetBtn" class="btn-text">Reset</button>
+        </div>
+        <div class="pomodoro-count">Completed sessions today: <b id="pomodoroCount">0</b></div>
+      </section>
+
       <section class="card">
         <div class="card-header"><h2>Log Today's Study Block</h2></div>
 
@@ -225,6 +253,13 @@
     <div class="modal-box">
       <h2>Add Study Task</h2>
       <input type="text" id="modalTaskInput" placeholder="Task title (e.g. Solve 40 questions on Integration)">
+      <div class="field-label">Subject (optional)</div>
+      <select id="modalTaskSubject">
+        <option value="">General</option>
+        <option value="Physics">Physics</option>
+        <option value="Chemistry">Chemistry</option>
+        <option value="Mathematics">Mathematics</option>
+      </select>
       <div class="field-label">Priority</div>
       <div class="priority-row">
         <button type="button" class="priority-btn active" data-priority="High">High</button>
@@ -278,4 +313,4 @@
 </div>
 <script src="app.js"></script>
 </body>
-</html>
+  </html>
