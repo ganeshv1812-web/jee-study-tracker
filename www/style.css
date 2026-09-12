@@ -136,7 +136,6 @@ body {
   padding: 10px 12px;
 }
 .task-item.done .task-text { text-decoration: line-through; color: var(--text-secondary); }
-.task-item.virtual { border-left: 3px solid var(--accent-amber); }
 .task-check { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .task-body { display: flex; flex-direction: column; gap: 2px; }
 .task-meta { font-size: 11px; color: var(--text-secondary); display: flex; gap: 8px; }
@@ -263,16 +262,13 @@ body {
 .completion-note { font-size: 11px; color: var(--accent-emerald); margin-bottom: 10px; }
 .lecture-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
 .lecture-input { width: 50px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; text-align: center; }
-.revision-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-.revision-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+.revision-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.revision-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
 .revision-chip.done { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,152,0,0.12); }
 .revision-chip.overdue { border-color: var(--accent-red); color: var(--accent-red); background: rgba(239,68,68,0.12); }
-.custom-revision-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
-.custom-revision-row input[type="date"] { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; }
-.custom-revision-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 4px 8px; border-radius: 8px; font-size: 10px; margin: 2px; }
-.custom-revision-chip.done { border-color: var(--accent-amber); color: var(--accent-amber); }
-.custom-revision-chip.overdue { border-color: var(--accent-red); color: var(--accent-red); }
-.custom-revision-chip button { background: none; border: none; color: inherit; font-size: 11px; padding: 0 2px; }
+.revision-offsets-row { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+.revision-offset-field { display: flex; flex-direction: column; align-items: center; font-size: 9px; color: var(--text-secondary); }
+.revision-offset-field input { width: 40px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 4px; border-radius: 6px; font-size: 10px; text-align: center; margin-top: 2px; }
 .status-btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .status-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 6px 10px; border-radius: 8px; }
 .status-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(34,211,238,0.1); }
@@ -302,6 +298,7 @@ body {
 .pomodoro-mode { text-align: center; font-size: 12px; color: var(--accent-cyan); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
 .pomodoro-count { text-align: center; font-size: 12px; color: var(--text-secondary); }
 .pomodoro-count b { color: var(--accent-amber); }
+.pomodoro-note { text-align: center; font-size: 10px; color: var(--text-secondary); margin-top: 6px; }
 
 .session-item-full { background: var(--surface-2); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
 .session-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
@@ -327,16 +324,14 @@ body {
 .test-error-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .test-error-chip { background: var(--surface); border: 1px solid var(--border); font-size: 10px; padding: 3px 8px; border-radius: 8px; color: var(--text-secondary); }
 
-.analytics-streak-row { display: flex; flex-direction: column; align-items: center; padding: 10px 0; }
-.analytics-streak-value { font-size: 48px; font-weight: 800; color: var(--accent-amber); }
-.analytics-streak-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
-.radar-legend { display: flex; justify-content: center; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
-.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-.legend-physics { background: var(--accent-cyan); }
-.legend-chemistry { background: var(--accent-emerald); }
-.legend-math { background: var(--accent-amber); }
-.radar-note { text-align: center; font-size: 10px; color: var(--text-secondary); margin-top: 8px; }
+.coach-quick-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.coach-quick-btn { background: var(--surface-2); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); font-size: 12px; padding: 8px 12px; border-radius: 999px; font-weight: 600; }
+.coach-chat-log { display: flex; flex-direction: column; gap: 10px; padding: 0 4px 16px; min-height: 100px; }
+.coach-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
+.coach-bubble.user { align-self: flex-end; background: rgba(255,152,0,0.15); border: 1px solid var(--accent-amber); color: var(--text-primary); }
+.coach-bubble.assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); }
+.coach-input-row { display: flex; gap: 8px; padding: 0 4px; }
+.coach-input-row input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 10px 12px; border-radius: 10px; font-size: 14px; }
 
 .modal-overlay {
   position: fixed;
