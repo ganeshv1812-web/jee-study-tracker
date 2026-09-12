@@ -28,7 +28,10 @@ var STORAGE_KEYS = {
   subjectMeta: "jee_subject_meta",
   phaseDates: "jee_phase_dates",
   tests: "jee_tests",
-  pomodoroCount: "jee_pomodoro_count"
+  pomodoroCount: "jee_pomodoro_count",
+  pomodoroState: "jee_pomodoro_state",
+  stopwatchState: "jee_stopwatch_state",
+  coachChat: "jee_coach_chat"
 };
 
 function loadData(key, fallback) {
@@ -65,8 +68,10 @@ var MATH_CHAPTERS = [
   "Coordinate Geometry","Three Dimensional Geometry","Vector Algebra","Statistics and Probability","Trigonometry"
 ];
 var STATUSES = ["Not Started", "In Progress", "Completed"];
-var REVISION_OFFSETS = [7, 14, 30, 60, 120, 240];
+var DEFAULT_REVISION_OFFSETS = [7, 14, 30, 60, 120, 240];
 var PRIORITY_WEIGHT = { High: 0, Medium: 1, Low: 2 };
+var POMODORO_WORK_MINUTES = 50;
+var POMODORO_BREAK_MINUTES = 10;
 
 var tasks = loadData(STORAGE_KEYS.tasks, []);
 var sessions = loadData(STORAGE_KEYS.sessions, []);
@@ -77,6 +82,7 @@ var goalHours = loadData(STORAGE_KEYS.goalHours, null);
 var subjectMeta = loadData(STORAGE_KEYS.subjectMeta, { Physics: {}, Chemistry: {}, Mathematics: {} });
 var tests = loadData(STORAGE_KEYS.tests, []);
 var pomodoroCountData = loadData(STORAGE_KEYS.pomodoroCount, { date: "", count: 0 });
+var coachChat = loadData(STORAGE_KEYS.coachChat, []);
 
 function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 function fmtDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
@@ -113,7 +119,7 @@ function makeChapter(subject, name) {
     subject: subject, name: name, subtopics: [], startDate: "", target: "", completionDate: "",
     progress: 0, status: "Not Started",
     revisions: [false, false, false, false, false, false],
-    customRevisions: [],
+    revisionOffsets: DEFAULT_REVISION_OFFSETS.slice(),
     notes: "", lecturesDone: 0, lecturesTotal: 0
   };
 }
@@ -138,13 +144,13 @@ chapters.forEach(function (c) {
   if (typeof c.lecturesTotal === "undefined") c.lecturesTotal = 0;
   if (typeof c.startDate === "undefined") c.startDate = "";
   if (typeof c.completionDate === "undefined") c.completionDate = "";
-  if (!c.revisions || c.revisions.length < 6) {
+  if (!c.revisionOffsets || c.revisionOffsets.length !== 6) c.revisionOffsets = DEFAULT_REVISION_OFFSETS.slice();
+  if (!c.revisions || c.revisions.length !== 6) {
     var old = c.revisions || [];
-    var padded = [];
-    for (var i = 0; i < 6; i++) padded.push(old[i] || false);
-    c.revisions = padded;
+    var next = [false, false, false, false, false, false];
+    for (var i = 0; i < old.length && i < 6; i++) next[i] = old[i];
+    c.revisions = next;
   }
-  if (!c.customRevisions) c.customRevisions = [];
   if (c.status === "Delayed" || c.status === "Revision Due") c.status = "In Progress";
 });
 saveData(STORAGE_KEYS.chapters, chapters);
@@ -199,17 +205,10 @@ function computeDisplayStatus(ch) {
         for (var i = 0; i < 6; i++) {
           if (!ch.revisions[i]) {
             var due = new Date(completionD);
-            due.setDate(due.getDate() + REVISION_OFFSETS[i]);
+            due.setDate(due.getDate() + ch.revisionOffsets[i]);
             if (today >= due) return "Revision Due";
           }
         }
-      }
-    }
-    var custom = ch.customRevisions || [];
-    for (var j = 0; j < custom.length; j++) {
-      if (!custom[j].done) {
-        var cd = parseDateStr(custom[j].date);
-        if (cd && today >= cd) return "Revision Due";
       }
     }
     return "Completed";
@@ -226,15 +225,8 @@ function isRevisionOverdue(ch, index) {
   var completionD = parseDateStr(ch.completionDate);
   if (!completionD) return false;
   var due = new Date(completionD);
-  due.setDate(due.getDate() + REVISION_OFFSETS[index]);
+  due.setDate(due.getDate() + ch.revisionOffsets[index]);
   return todayMidnight() >= due;
-}
-
-function isCustomRevisionOverdue(cr) {
-  if (cr.done) return false;
-  var d = parseDateStr(cr.date);
-  if (!d) return false;
-  return todayMidnight() >= d;
 }
 
 function updateStreak() {
@@ -245,11 +237,7 @@ function updateStreak() {
   streak.lastDate = today;
   saveData(STORAGE_KEYS.streak, streak);
 }
-function renderStreak() {
-  document.getElementById("streakCount").textContent = streak.count;
-  var analyticsStreakEl = document.getElementById("analyticsStreak");
-  if (analyticsStreakEl) analyticsStreakEl.textContent = streak.count;
-}
+function renderStreak() { document.getElementById("streakCount").textContent = streak.count; }
 
 function daysBetween(dateStr) {
   var target = parseDateStr(dateStr);
@@ -384,6 +372,12 @@ function renderMiniChapterLists() {
     }).join("");
 }
 
+function createdDateStr(task) {
+  var ts = parseInt(task.id, 10);
+  if (isNaN(ts)) return todayStr();
+  return fmtDate(new Date(ts));
+}
+
 function escalatePendingTaskPriorities() {
   var now = Date.now();
   var changed = false;
@@ -398,43 +392,12 @@ function escalatePendingTaskPriorities() {
   if (changed) saveData(STORAGE_KEYS.tasks, tasks);
 }
 
-function getVirtualRevisionTasks() {
-  var virtual = [];
-  chapters.forEach(function (ch) {
-    for (var i = 0; i < 6; i++) {
-      if (isRevisionOverdue(ch, i)) {
-        virtual.push({
-          id: "revtask::" + ch.id + "::" + i,
-          text: ch.name + " - R" + (i + 1) + " revision overdue",
-          subject: ch.subject, priority: "High", minutes: 0, done: false,
-          virtual: true, virtualType: "fixed", chapterId: ch.id, revIndex: i
-        });
-      }
-    }
-    (ch.customRevisions || []).forEach(function (cr) {
-      if (isCustomRevisionOverdue(cr)) {
-        virtual.push({
-          id: "crevtask::" + ch.id + "::" + cr.id,
-          text: ch.name + " - custom revision overdue",
-          subject: ch.subject, priority: "High", minutes: 0, done: false,
-          virtual: true, virtualType: "custom", chapterId: ch.id, customId: cr.id
-        });
-      }
-    });
-  });
-  return virtual;
-}
-
-function sortedTasks() {
-  var virtual = getVirtualRevisionTasks();
-  var pending = tasks.filter(function (t) { return !t.done; });
-  var done = tasks.filter(function (t) { return t.done; });
-  pending.sort(function (a, b) {
+function sortByPriority(list) {
+  return list.slice().sort(function (a, b) {
     var wa = PRIORITY_WEIGHT[a.priority] === undefined ? 1 : PRIORITY_WEIGHT[a.priority];
     var wb = PRIORITY_WEIGHT[b.priority] === undefined ? 1 : PRIORITY_WEIGHT[b.priority];
     return wa - wb;
   });
-  return virtual.concat(pending).concat(done);
 }
 
 function priorityDotClass(priority) {
@@ -443,95 +406,85 @@ function priorityDotClass(priority) {
   return "priority-dot";
 }
 
-function renderTasks() {
-  var realPendingCount = tasks.filter(function (t) { return !t.done; }).length;
-  var virtualCount = getVirtualRevisionTasks().length;
-  document.getElementById("pendingCount").textContent = realPendingCount + virtualCount;
-  var list = document.getElementById("taskList");
-  var ordered = sortedTasks();
-  if (ordered.length === 0) {
-    list.innerHTML = "<li class='empty'>No tasks yet. Tap + Add Task above.</li>";
-    return;
-  }
-  list.innerHTML = ordered.map(function (task) {
-    var metaBits = [];
-    if (task.subject) metaBits.push("<span>" + escapeHtml(task.subject) + "</span>");
-    if (task.priority) metaBits.push("<span>" + escapeHtml(task.priority) + "</span>");
-    if (task.minutes) metaBits.push("<span>" + task.minutes + " mins</span>");
-    var deleteBtn = task.virtual ? "" : "<button class='task-delete' data-id='" + task.id + "'>&#10005;</button>";
-    return "<li class='task-item" + (task.done ? " done" : "") + (task.virtual ? " virtual" : "") + "'>" +
-      "<label class='task-check'>" +
-      "<input type='checkbox' " + (task.done ? "checked" : "") + " data-id='" + task.id + "' data-virtual='" + (task.virtual ? "1" : "0") + "'>" +
-      "<span class='task-body'>" +
-      "<span class='task-text'>" + escapeHtml(task.text) + "</span>" +
-      "<span class='task-meta'>" + metaBits.join(" &middot; ") + "</span>" +
-      "</span>" +
-      "</label>" +
-      "<span class='task-right'>" +
-      "<span class='" + priorityDotClass(task.priority) + "'></span>" +
-      deleteBtn +
-      "</span>" +
-      "</li>";
-  }).join("");
+function renderTaskLi(task) {
+  var metaBits = [];
+  if (task.subject) metaBits.push("<span>" + escapeHtml(task.subject) + "</span>");
+  if (task.priority) metaBits.push("<span>" + escapeHtml(task.priority) + "</span>");
+  if (task.minutes) metaBits.push("<span>" + task.minutes + " mins</span>");
+  return "<li class='task-item" + (task.done ? " done" : "") + "'>" +
+    "<label class='task-check'>" +
+    "<input type='checkbox' " + (task.done ? "checked" : "") + " data-id='" + task.id + "'>" +
+    "<span class='task-body'>" +
+    "<span class='task-text'>" + escapeHtml(task.text) + "</span>" +
+    "<span class='task-meta'>" + metaBits.join(" &middot; ") + "</span>" +
+    "</span>" +
+    "</label>" +
+    "<span class='task-right'>" +
+    "<span class='" + priorityDotClass(task.priority) + "'></span>" +
+    "<button class='task-delete' data-id='" + task.id + "'>&#10005;</button>" +
+    "</span>" +
+    "</li>";
 }
 
-document.getElementById("taskList").addEventListener("click", function (e) {
+function renderTasks() {
+  var today = todayStr();
+  var todayTasks = tasks.filter(function (t) { return createdDateStr(t) === today; });
+  var rolloverTasks = tasks.filter(function (t) { return !t.done && createdDateStr(t) !== today; });
+
+  document.getElementById("todoCount").textContent = todayTasks.filter(function (t) { return !t.done; }).length;
+  document.getElementById("pendingRolloverCount").textContent = rolloverTasks.length;
+
+  var todoList = document.getElementById("todoTodayList");
+  todoList.innerHTML = todayTasks.length === 0
+    ? "<li class='empty'>No tasks added today yet. Tap + Add Task above.</li>"
+    : sortByPriority(todayTasks).map(renderTaskLi).join("");
+
+  var rolloverList = document.getElementById("pendingRolloverList");
+  rolloverList.innerHTML = rolloverTasks.length === 0
+    ? "<li class='empty'>Nothing rolled over. Great job staying on top of things.</li>"
+    : sortByPriority(rolloverTasks).map(renderTaskLi).join("");
+}
+
+function handleTaskCheckboxClick(cb) {
+  var task = tasks.find(function (t) { return t.id === cb.dataset.id; });
+  if (!task) return;
+  var wasDone = task.done;
+  task.done = cb.checked;
+  if (task.done && !wasDone) {
+    var newSession = {
+      id: Date.now().toString(), subject: task.subject || "General",
+      chapterId: null, chapterName: task.text,
+      minutes: task.minutes || 0, questions: 0, pages: 0, productivity: 0,
+      notes: "Auto-logged from completed task.", date: todayStr()
+    };
+    sessions.push(newSession);
+    task.loggedSessionId = newSession.id;
+    saveData(STORAGE_KEYS.sessions, sessions);
+    updateStreak();
+    renderSessions(); renderStats(); renderStreak(); renderInsight();
+    showToast("Task completed and logged to Daily Log");
+  } else if (!task.done && wasDone && task.loggedSessionId) {
+    sessions = sessions.filter(function (s) { return s.id !== task.loggedSessionId; });
+    task.loggedSessionId = null;
+    saveData(STORAGE_KEYS.sessions, sessions);
+    renderSessions(); renderStats(); renderInsight();
+  }
+  saveData(STORAGE_KEYS.tasks, tasks);
+  renderTasks();
+}
+function handleTaskDeleteClick(delBtn) {
+  tasks = tasks.filter(function (t) { return t.id !== delBtn.dataset.id; });
+  saveData(STORAGE_KEYS.tasks, tasks);
+  renderTasks();
+}
+function taskListClickHandler(e) {
   var cb = e.target.matches("input[type='checkbox']") ? e.target : null;
   var delBtn = e.target.closest(".task-delete");
-  if (cb) {
-    var id = cb.dataset.id;
-    if (cb.dataset.virtual === "1") {
-      if (id.indexOf("revtask::") === 0) {
-        var parts = id.split("::");
-        var ch = chapters.find(function (c) { return c.id === parts[1]; });
-        if (ch) {
-          ch.revisions[parseInt(parts[2], 10)] = true;
-          saveData(STORAGE_KEYS.chapters, chapters);
-          showToast("Revision marked complete");
-        }
-      } else if (id.indexOf("crevtask::") === 0) {
-        var parts2 = id.split("::");
-        var ch2 = chapters.find(function (c) { return c.id === parts2[1]; });
-        if (ch2) {
-          var cr = (ch2.customRevisions || []).find(function (c) { return c.id === parts2[2]; });
-          if (cr) { cr.done = true; saveData(STORAGE_KEYS.chapters, chapters); showToast("Revision marked complete"); }
-        }
-      }
-      renderTasks(); renderMiniChapterLists(); renderChapters(); renderInsight();
-      return;
-    }
-    var task = tasks.find(function (t) { return t.id === id; });
-    if (task) {
-      var wasDone = task.done;
-      task.done = cb.checked;
-      if (task.done && !wasDone) {
-        var newSession = {
-          id: Date.now().toString(), subject: task.subject || "General",
-          chapterId: null, chapterName: task.text,
-          minutes: task.minutes || 0, questions: 0, pages: 0, productivity: 0,
-          notes: "Auto-logged from completed task.", date: todayStr()
-        };
-        sessions.push(newSession);
-        task.loggedSessionId = newSession.id;
-        saveData(STORAGE_KEYS.sessions, sessions);
-        updateStreak();
-        renderSessions(); renderStats(); renderStreak(); renderInsight();
-        showToast("Task completed and logged to Daily Log");
-      } else if (!task.done && wasDone && task.loggedSessionId) {
-        sessions = sessions.filter(function (s) { return s.id !== task.loggedSessionId; });
-        task.loggedSessionId = null;
-        saveData(STORAGE_KEYS.sessions, sessions);
-        renderSessions(); renderStats(); renderInsight();
-      }
-      saveData(STORAGE_KEYS.tasks, tasks);
-    }
-    renderTasks();
-  } else if (delBtn) {
-    tasks = tasks.filter(function (t) { return t.id !== delBtn.dataset.id; });
-    saveData(STORAGE_KEYS.tasks, tasks);
-    renderTasks();
-  }
-});
+  if (cb) handleTaskCheckboxClick(cb);
+  else if (delBtn) handleTaskDeleteClick(delBtn);
+}
+document.getElementById("todoTodayList").addEventListener("click", taskListClickHandler);
+document.getElementById("pendingRolloverList").addEventListener("click", taskListClickHandler);
 
 var taskModalOverlay = document.getElementById("taskModalOverlay");
 document.getElementById("openTaskModalBtn").addEventListener("click", function () {
@@ -596,13 +549,6 @@ function renderChapters() {
     var displayStatus = computeDisplayStatus(ch);
     var subtopicsHtml = (ch.subtopics && ch.subtopics.length)
       ? "<div class='subtopics-row'>" + ch.subtopics.map(function (s) { return "<span>&bull; " + escapeHtml(s) + "</span>"; }).join(" ") + "</div>" : "";
-    var customChipsHtml = (ch.customRevisions || []).map(function (cr) {
-      var cls = "custom-revision-chip" + (cr.done ? " done" : "") + (isCustomRevisionOverdue(cr) ? " overdue" : "");
-      return "<span class='" + cls + "'>" +
-        "<button class='custom-revision-toggle' data-id='" + ch.id + "' data-crid='" + cr.id + "'>" + cr.date + "</button>" +
-        "<button class='custom-revision-delete' data-id='" + ch.id + "' data-crid='" + cr.id + "'>&#10005;</button>" +
-        "</span>";
-    }).join("");
     return "<div class='chapter-card'>" +
       "<div class='chapter-top'>" +
       "<div class='chapter-title'>" + escapeHtml(ch.name) + "</div>" +
@@ -634,10 +580,10 @@ function renderChapters() {
         return "<button class='" + cls + "' data-id='" + ch.id + "' data-rev='" + i + "'>R" + (i + 1) + "</button>";
       }).join("") +
       "</div>" +
-      (customChipsHtml ? "<div class='revision-row'>" + customChipsHtml + "</div>" : "") +
-      "<div class='custom-revision-row'>" +
-      "<input type='date' class='custom-revision-date-input' data-id='" + ch.id + "'>" +
-      "<button class='btn-text add-custom-revision-btn' data-id='" + ch.id + "'>+ Custom Revision</button>" +
+      "<div class='revision-offsets-row'>" +
+      [0, 1, 2, 3, 4, 5].map(function (i) {
+        return "<label class='revision-offset-field'>R" + (i + 1) + "d<input type='number' class='revision-offset-input' data-id='" + ch.id + "' data-rev='" + i + "' min='1' value='" + ch.revisionOffsets[i] + "'></label>";
+      }).join("") +
       "</div>" +
       "<div class='status-btn-row'>" +
       STATUSES.map(function (s) {
@@ -662,8 +608,10 @@ document.getElementById("chapterForm").addEventListener("submit", function (e) {
     id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
     subject: currentSubject, name: name, subtopics: subtopics,
     startDate: startInput.value || "", target: targetInput.value || "", completionDate: "",
-    progress: 0, status: "Not Started", revisions: [false, false, false, false, false, false],
-    customRevisions: [], notes: "", lecturesDone: 0, lecturesTotal: 0
+    progress: 0, status: "Not Started",
+    revisions: [false, false, false, false, false, false],
+    revisionOffsets: DEFAULT_REVISION_OFFSETS.slice(),
+    notes: "", lecturesDone: 0, lecturesTotal: 0
   });
   saveData(STORAGE_KEYS.chapters, chapters);
   nameInput.value = ""; subtopicsInput.value = ""; startInput.value = ""; targetInput.value = "";
@@ -675,9 +623,6 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
   var delBtn = e.target.closest(".chapter-delete");
   var revBtn = e.target.closest(".revision-chip");
   var statusBtn = e.target.closest(".status-btn");
-  var crToggle = e.target.closest(".custom-revision-toggle");
-  var crDelete = e.target.closest(".custom-revision-delete");
-  var addCrBtn = e.target.closest(".add-custom-revision-btn");
   if (delBtn) {
     chapters = chapters.filter(function (c) { return c.id !== delBtn.dataset.id; });
   } else if (revBtn) {
@@ -691,24 +636,6 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
         ch2.progress = 100;
         if (!ch2.completionDate) ch2.completionDate = todayStr();
       }
-    }
-  } else if (crToggle) {
-    var ch3 = chapters.find(function (c) { return c.id === crToggle.dataset.id; });
-    if (ch3) {
-      var cr3 = (ch3.customRevisions || []).find(function (c) { return c.id === crToggle.dataset.crid; });
-      if (cr3) cr3.done = !cr3.done;
-    }
-  } else if (crDelete) {
-    var ch4 = chapters.find(function (c) { return c.id === crDelete.dataset.id; });
-    if (ch4) ch4.customRevisions = (ch4.customRevisions || []).filter(function (c) { return c.id !== crDelete.dataset.crid; });
-  } else if (addCrBtn) {
-    var ch5 = chapters.find(function (c) { return c.id === addCrBtn.dataset.id; });
-    var dateInput = document.querySelector(".custom-revision-date-input[data-id='" + addCrBtn.dataset.id + "']");
-    if (ch5 && dateInput && dateInput.value) {
-      if (!ch5.customRevisions) ch5.customRevisions = [];
-      ch5.customRevisions.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: dateInput.value, done: false });
-    } else {
-      return;
     }
   } else { return; }
   saveData(STORAGE_KEYS.chapters, chapters);
@@ -766,6 +693,17 @@ document.getElementById("chapterList").addEventListener("change", function (e) {
       if (e.target.classList.contains("lecture-done-input")) chL.lecturesDone = val;
       else chL.lecturesTotal = val;
       saveData(STORAGE_KEYS.chapters, chapters);
+    }
+  }
+  if (e.target.classList.contains("revision-offset-input")) {
+    var chR = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chR) {
+      var idx = parseInt(e.target.dataset.rev, 10);
+      var days = parseInt(e.target.value, 10);
+      if (isNaN(days) || days < 1) days = 1;
+      chR.revisionOffsets[idx] = days;
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists();
     }
   }
 });
@@ -858,10 +796,52 @@ document.getElementById("sessionForm").addEventListener("submit", function (e) {
   showToast("Study session logged");
 });
 
-var stopwatchRunning = false;
-var stopwatchStart = 0;
-var stopwatchAccumulated = 0;
-var stopwatchInterval = null;
+function getLocalNotifications() {
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      return window.Capacitor.Plugins.LocalNotifications;
+    }
+  } catch (e) {}
+  return null;
+}
+var notifPermissionRequested = false;
+function ensureNotifPermission() {
+  var LN = getLocalNotifications();
+  if (!LN || notifPermissionRequested) return;
+  notifPermissionRequested = true;
+  try {
+    LN.requestPermissions();
+  } catch (e) {}
+}
+function schedulePomodoroNotification(title, body, atTimestamp) {
+  var LN = getLocalNotifications();
+  var noteEl = document.getElementById("pomodoroNotifNote");
+  if (!LN) {
+    if (noteEl) noteEl.textContent = "Background alert unavailable on this build; keep the app open for alerts.";
+    return;
+  }
+  try {
+    LN.schedule({
+      notifications: [{
+        id: 9001,
+        title: title,
+        body: body,
+        schedule: { at: new Date(atTimestamp) }
+      }]
+    });
+    if (noteEl) noteEl.textContent = "You'll get a notification even if you close the app.";
+  } catch (e) {
+    if (noteEl) noteEl.textContent = "Background alert unavailable on this build; keep the app open for alerts.";
+  }
+}
+function cancelPomodoroNotification() {
+  var LN = getLocalNotifications();
+  if (!LN) return;
+  try { LN.cancel({ notifications: [{ id: 9001 }] }); } catch (e) {}
+}
+
+var stopwatchTickInterval = null;
+var stopwatchState = loadData(STORAGE_KEYS.stopwatchState, { running: false, startAt: 0, accumulatedMs: 0 });
 
 function formatStopwatch(ms) {
   var totalSeconds = Math.floor(ms / 1000);
@@ -870,62 +850,57 @@ function formatStopwatch(ms) {
   var s = totalSeconds % 60;
   return pad2(h) + ":" + pad2(m) + ":" + pad2(s);
 }
+function currentStopwatchElapsed() {
+  return stopwatchState.accumulatedMs + (stopwatchState.running ? (Date.now() - stopwatchState.startAt) : 0);
+}
 function updateStopwatchDisplay() {
-  var elapsed = stopwatchAccumulated + (stopwatchRunning ? (Date.now() - stopwatchStart) : 0);
-  document.getElementById("stopwatchDisplay").textContent = formatStopwatch(elapsed);
+  document.getElementById("stopwatchDisplay").textContent = formatStopwatch(currentStopwatchElapsed());
+  document.getElementById("stopwatchStartBtn").disabled = stopwatchState.running;
+  document.getElementById("stopwatchPauseBtn").disabled = !stopwatchState.running;
+}
+function startStopwatchInterval() {
+  if (stopwatchTickInterval) clearInterval(stopwatchTickInterval);
+  if (stopwatchState.running) stopwatchTickInterval = setInterval(updateStopwatchDisplay, 500);
 }
 document.getElementById("stopwatchStartBtn").addEventListener("click", function () {
-  if (stopwatchRunning) return;
-  stopwatchRunning = true;
-  stopwatchStart = Date.now();
-  stopwatchInterval = setInterval(updateStopwatchDisplay, 500);
-  document.getElementById("stopwatchStartBtn").disabled = true;
-  document.getElementById("stopwatchPauseBtn").disabled = false;
+  if (stopwatchState.running) return;
+  stopwatchState.running = true;
+  stopwatchState.startAt = Date.now();
+  saveData(STORAGE_KEYS.stopwatchState, stopwatchState);
+  startStopwatchInterval();
+  updateStopwatchDisplay();
 });
 document.getElementById("stopwatchPauseBtn").addEventListener("click", function () {
-  if (!stopwatchRunning) return;
-  stopwatchAccumulated += Date.now() - stopwatchStart;
-  stopwatchRunning = false;
-  clearInterval(stopwatchInterval);
+  if (!stopwatchState.running) return;
+  stopwatchState.accumulatedMs += Date.now() - stopwatchState.startAt;
+  stopwatchState.running = false;
+  saveData(STORAGE_KEYS.stopwatchState, stopwatchState);
+  if (stopwatchTickInterval) clearInterval(stopwatchTickInterval);
   updateStopwatchDisplay();
-  document.getElementById("stopwatchStartBtn").disabled = false;
-  document.getElementById("stopwatchPauseBtn").disabled = true;
 });
 document.getElementById("stopwatchResetBtn").addEventListener("click", function () {
-  stopwatchRunning = false;
-  stopwatchAccumulated = 0;
-  clearInterval(stopwatchInterval);
+  stopwatchState = { running: false, startAt: 0, accumulatedMs: 0 };
+  saveData(STORAGE_KEYS.stopwatchState, stopwatchState);
+  if (stopwatchTickInterval) clearInterval(stopwatchTickInterval);
   updateStopwatchDisplay();
-  document.getElementById("stopwatchStartBtn").disabled = false;
-  document.getElementById("stopwatchPauseBtn").disabled = true;
 });
 document.getElementById("stopwatchUseBtn").addEventListener("click", function () {
-  var elapsedMs = stopwatchAccumulated + (stopwatchRunning ? (Date.now() - stopwatchStart) : 0);
-  var mins = Math.round(elapsedMs / 60000);
+  var mins = Math.round(currentStopwatchElapsed() / 60000);
   if (mins < 1) mins = 1;
   document.getElementById("sessionMinutes").value = mins;
   showToast("Stopwatch time applied: " + mins + " mins");
 });
 
-var POMODORO_WORK_MS = 50 * 60 * 1000;
-var POMODORO_BREAK_MS = 10 * 60 * 1000;
-var pomodoroRunning = false;
-var pomodoroMode = "work";
-var pomodoroEndTime = 0;
-var pomodoroRemainingMs = POMODORO_WORK_MS;
-var pomodoroInterval = null;
+var pomodoroTickInterval = null;
+var pomodoroState = loadData(STORAGE_KEYS.pomodoroState, {
+  running: false, mode: "work", endAt: 0, remainingSeconds: POMODORO_WORK_MINUTES * 60
+});
 
-function formatPomodoro(totalMs) {
-  var totalSeconds = Math.max(0, Math.ceil(totalMs / 1000));
-  var m = Math.floor(totalSeconds / 60);
-  var s = totalSeconds % 60;
-  return pad2(m) + ":" + pad2(s);
-}
-function updatePomodoroDisplay() {
-  var remaining = pomodoroRunning ? (pomodoroEndTime - Date.now()) : pomodoroRemainingMs;
-  if (remaining < 0) remaining = 0;
-  document.getElementById("pomodoroDisplay").textContent = formatPomodoro(remaining);
-  document.getElementById("pomodoroMode").textContent = pomodoroMode === "work" ? "Work Session" : "Break";
+function formatPomodoro(totalSeconds) {
+  var s = Math.max(0, totalSeconds);
+  var m = Math.floor(s / 60);
+  var sec = s % 60;
+  return pad2(m) + ":" + pad2(sec);
 }
 function ensurePomodoroCountToday() {
   if (pomodoroCountData.date !== todayStr()) {
@@ -937,60 +912,68 @@ function renderPomodoroCount() {
   ensurePomodoroCountToday();
   document.getElementById("pomodoroCount").textContent = pomodoroCountData.count;
 }
-function pomodoroTick() {
-  if (!pomodoroRunning) return;
-  var remaining = pomodoroEndTime - Date.now();
-  if (remaining <= 0) {
-    if (pomodoroMode === "work") {
+function catchUpPomodoro() {
+  if (!pomodoroState.running) return;
+  var safetyLimit = 200;
+  while (pomodoroState.endAt > 0 && Date.now() >= pomodoroState.endAt && safetyLimit > 0) {
+    safetyLimit -= 1;
+    if (pomodoroState.mode === "work") {
       ensurePomodoroCountToday();
       pomodoroCountData.count += 1;
       saveData(STORAGE_KEYS.pomodoroCount, pomodoroCountData);
-      renderPomodoroCount();
-      showToast("Work session complete. Time for a break.");
-      pomodoroMode = "break";
-      pomodoroRemainingMs = POMODORO_BREAK_MS;
+      pomodoroState.mode = "break";
+      pomodoroState.endAt = pomodoroState.endAt + POMODORO_BREAK_MINUTES * 60000;
     } else {
-      showToast("Break over. Back to work.");
-      pomodoroMode = "work";
-      pomodoroRemainingMs = POMODORO_WORK_MS;
+      pomodoroState.mode = "work";
+      pomodoroState.endAt = pomodoroState.endAt + POMODORO_WORK_MINUTES * 60000;
     }
-    pomodoroEndTime = Date.now() + pomodoroRemainingMs;
   }
-  updatePomodoroDisplay();
+  saveData(STORAGE_KEYS.pomodoroState, pomodoroState);
+}
+function updatePomodoroDisplay() {
+  catchUpPomodoro();
+  var remaining = pomodoroState.running
+    ? Math.max(0, Math.round((pomodoroState.endAt - Date.now()) / 1000))
+    : pomodoroState.remainingSeconds;
+  document.getElementById("pomodoroDisplay").textContent = formatPomodoro(remaining);
+  document.getElementById("pomodoroMode").textContent = pomodoroState.mode === "work" ? "Work Session" : "Break";
+  document.getElementById("pomodoroStartBtn").disabled = pomodoroState.running;
+  document.getElementById("pomodoroPauseBtn").disabled = !pomodoroState.running;
+  renderPomodoroCount();
+}
+function startPomodoroInterval() {
+  if (pomodoroTickInterval) clearInterval(pomodoroTickInterval);
+  if (pomodoroState.running) pomodoroTickInterval = setInterval(updatePomodoroDisplay, 1000);
 }
 document.getElementById("pomodoroStartBtn").addEventListener("click", function () {
-  if (pomodoroRunning) return;
-  pomodoroRunning = true;
-  pomodoroEndTime = Date.now() + pomodoroRemainingMs;
-  pomodoroInterval = setInterval(pomodoroTick, 1000);
-  document.getElementById("pomodoroStartBtn").disabled = true;
-  document.getElementById("pomodoroPauseBtn").disabled = false;
+  if (pomodoroState.running) return;
+  ensureNotifPermission();
+  var seconds = pomodoroState.remainingSeconds > 0 ? pomodoroState.remainingSeconds : (pomodoroState.mode === "work" ? POMODORO_WORK_MINUTES * 60 : POMODORO_BREAK_MINUTES * 60);
+  pomodoroState.running = true;
+  pomodoroState.endAt = Date.now() + seconds * 1000;
+  saveData(STORAGE_KEYS.pomodoroState, pomodoroState);
+  var title = pomodoroState.mode === "work" ? "Work session complete" : "Break over";
+  var body = pomodoroState.mode === "work" ? "Time for a " + POMODORO_BREAK_MINUTES + " min break." : "Back to a " + POMODORO_WORK_MINUTES + " min work session.";
+  schedulePomodoroNotification(title, body, pomodoroState.endAt);
+  startPomodoroInterval();
+  updatePomodoroDisplay();
 });
 document.getElementById("pomodoroPauseBtn").addEventListener("click", function () {
-  if (!pomodoroRunning) return;
-  pomodoroRemainingMs = Math.max(0, pomodoroEndTime - Date.now());
-  pomodoroRunning = false;
-  clearInterval(pomodoroInterval);
+  if (!pomodoroState.running) return;
+  pomodoroState.remainingSeconds = Math.max(0, Math.round((pomodoroState.endAt - Date.now()) / 1000));
+  pomodoroState.running = false;
+  pomodoroState.endAt = 0;
+  saveData(STORAGE_KEYS.pomodoroState, pomodoroState);
+  cancelPomodoroNotification();
+  if (pomodoroTickInterval) clearInterval(pomodoroTickInterval);
   updatePomodoroDisplay();
-  document.getElementById("pomodoroStartBtn").disabled = false;
-  document.getElementById("pomodoroPauseBtn").disabled = true;
 });
 document.getElementById("pomodoroResetBtn").addEventListener("click", function () {
-  pomodoroRunning = false;
-  clearInterval(pomodoroInterval);
-  pomodoroMode = "work";
-  pomodoroRemainingMs = POMODORO_WORK_MS;
+  pomodoroState = { running: false, mode: "work", endAt: 0, remainingSeconds: POMODORO_WORK_MINUTES * 60 };
+  saveData(STORAGE_KEYS.pomodoroState, pomodoroState);
+  cancelPomodoroNotification();
+  if (pomodoroTickInterval) clearInterval(pomodoroTickInterval);
   updatePomodoroDisplay();
-  document.getElementById("pomodoroStartBtn").disabled = false;
-  document.getElementById("pomodoroPauseBtn").disabled = true;
-});
-
-document.addEventListener("visibilitychange", function () {
-  if (!document.hidden) {
-    updateStopwatchDisplay();
-    if (pomodoroRunning) pomodoroTick();
-    updatePomodoroDisplay();
-  }
 });
 
 function renderMistakeClassification() {
@@ -1087,75 +1070,87 @@ document.getElementById("saveTestBtn").addEventListener("click", function () {
   showToast("Test logged");
 });
 
-function computeSubjectAnalytics(subject) {
-  var subChapters = chapters.filter(function (c) { return c.subject === subject; });
-  if (subChapters.length === 0) return { completion: 0, lecture: 0, revision: 0 };
-  var completion = subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length;
-  var lectureTotals = subChapters.reduce(function (acc, c) {
-    acc.done += c.lecturesDone || 0; acc.total += c.lecturesTotal || 0; return acc;
-  }, { done: 0, total: 0 });
-  var lecture = lectureTotals.total > 0 ? (lectureTotals.done / lectureTotals.total) * 100 : 0;
-  var completedChapters = subChapters.filter(function (c) { return c.status === "Completed"; });
-  var revisionScore = 0;
-  if (completedChapters.length > 0) {
-    var totalDue = 0, totalDone = 0;
-    completedChapters.forEach(function (c) {
-      for (var i = 0; i < 6; i++) {
-        var completionD = parseDateStr(c.completionDate);
-        if (completionD) {
-          var due = new Date(completionD);
-          due.setDate(due.getDate() + REVISION_OFFSETS[i]);
-          if (todayMidnight() >= due) {
-            totalDue += 1;
-            if (c.revisions[i]) totalDone += 1;
-          }
-        }
-      }
-    });
-    revisionScore = totalDue > 0 ? (totalDone / totalDue) * 100 : 100;
-  }
-  return { completion: Math.round(completion), lecture: Math.round(lecture), revision: Math.round(revisionScore) };
+function coachSubjectReadiness() {
+  var result = {};
+  ["Physics", "Chemistry", "Mathematics"].forEach(function (sub) {
+    var subChapters = chapters.filter(function (c) { return c.subject === sub; });
+    if (subChapters.length === 0) { result[sub] = 0; return; }
+    result[sub] = Math.round(subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length);
+  });
+  return result;
 }
+function coachAnswer(question) {
+  var q = question.toLowerCase();
+  var withDisplay = chapters.map(function (c) { return { ch: c, displayStatus: computeDisplayStatus(c) }; });
+  var delayed = withDisplay.filter(function (x) { return x.displayStatus === "Delayed"; });
+  var revisionDue = withDisplay.filter(function (x) { return x.displayStatus === "Revision Due"; });
+  var readiness = coachSubjectReadiness();
 
-function polarPoint(cx, cy, radius, angleDeg) {
-  var rad = (angleDeg * Math.PI) / 180;
-  return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+  if (q.indexOf("today") !== -1 || q === "today") {
+    var inProgress = chapters.filter(function (c) { return c.status === "In Progress"; });
+    if (delayed.length > 0) return "Start with " + delayed[0].ch.name + " (" + delayed[0].ch.subject + ") since it's past its target date. After that, continue " + (inProgress[0] ? inProgress[0].name : "your current chapter") + ".";
+    if (revisionDue.length > 0) return "Revise " + revisionDue[0].ch.name + " today, its revision checkpoint is due. Then continue with whatever chapter you're currently In Progress on.";
+    if (inProgress.length > 0) return "Continue with " + inProgress[0].name + " (" + inProgress[0].subject + "), currently at " + inProgress[0].progress + "% progress.";
+    return "You have no chapters In Progress right now. Head to Syllabus and start one.";
+  }
+  if (q.indexOf("backlog") !== -1 || q.indexOf("delayed") !== -1) {
+    if (delayed.length === 0) return "No delayed chapters right now. Your backlog is clear.";
+    return "You have " + delayed.length + " delayed chapter(s): " + delayed.map(function (x) { return x.ch.name; }).join(", ") + ".";
+  }
+  if (q.indexOf("ready") !== -1) {
+    var overall = Math.round((readiness.Physics + readiness.Chemistry + readiness.Mathematics) / 3);
+    return "Physics: " + readiness.Physics + "% | Chemistry: " + readiness.Chemistry + "% | Mathematics: " + readiness.Mathematics + "% | Overall readiness: " + overall + "%.";
+  }
+  if (q.indexOf("burnout") !== -1) {
+    var last3 = [];
+    for (var i = 0; i < 3; i++) {
+      var d = fmtDate(new Date(Date.now() - i * 86400000));
+      var mins = sessions.filter(function (s) { return s.date === d; }).reduce(function (sum, s) { return sum + s.minutes; }, 0);
+      last3.push(mins);
+    }
+    var avgHrs = (last3.reduce(function (a, b) { return a + b; }, 0) / 3 / 60).toFixed(1);
+    if (goalHours && parseFloat(avgHrs) < goalHours * 0.5) return "Your last 3 days average " + avgHrs + "h/day, well under your " + goalHours + "h goal. Consider a lighter, more sustainable schedule or checking what's blocking you.";
+    return "Your last 3 days average " + avgHrs + "h/day. That looks reasonably steady, keep your streak going without overdoing it.";
+  }
+  if (q.indexOf("weak") !== -1) {
+    var weakest = "Physics";
+    if (readiness.Chemistry < readiness[weakest]) weakest = "Chemistry";
+    if (readiness.Mathematics < readiness[weakest]) weakest = "Mathematics";
+    return weakest + " has your lowest completion at " + readiness[weakest] + "%. Consider allocating more sessions there.";
+  }
+  return "I can help with: what to study today, your backlog, exam readiness, burnout check, or your weakest subject. Try tapping one of the quick buttons above, or ask me directly.";
 }
-function buildRadarSVG() {
-  var cx = 110, cy = 100, maxR = 80;
-  var angles = [-90, 30, 150];
-  var labels = ["Completion", "Lecture", "Revision"];
-  var subjects = [
-    { name: "Physics", color: "#22d3ee", data: computeSubjectAnalytics("Physics") },
-    { name: "Chemistry", color: "#10b981", data: computeSubjectAnalytics("Chemistry") },
-    { name: "Mathematics", color: "#ff9800", data: computeSubjectAnalytics("Mathematics") }
-  ];
-  var svg = "<svg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'>";
-  [0.25, 0.5, 0.75, 1].forEach(function (frac) {
-    var pts = angles.map(function (a) { var p = polarPoint(cx, cy, maxR * frac, a); return p.x + "," + p.y; }).join(" ");
-    svg += "<polygon points='" + pts + "' fill='none' stroke='#2a2a2a' stroke-width='1'></polygon>";
-  });
-  angles.forEach(function (a, i) {
-    var p = polarPoint(cx, cy, maxR, a);
-    svg += "<line x1='" + cx + "' y1='" + cy + "' x2='" + p.x + "' y2='" + p.y + "' stroke='#2a2a2a' stroke-width='1'></line>";
-    var lp = polarPoint(cx, cy, maxR + 16, a);
-    svg += "<text x='" + lp.x + "' y='" + lp.y + "' fill='#a0a0a0' font-size='10' text-anchor='middle'>" + labels[i] + "</text>";
-  });
-  subjects.forEach(function (subj) {
-    var values = [subj.data.completion, subj.data.lecture, subj.data.revision];
-    var pts = angles.map(function (a, i) {
-      var frac = Math.max(0, Math.min(100, values[i])) / 100;
-      var p = polarPoint(cx, cy, maxR * frac, a);
-      return p.x + "," + p.y;
-    }).join(" ");
-    svg += "<polygon points='" + pts + "' fill='" + subj.color + "' fill-opacity='0.15' stroke='" + subj.color + "' stroke-width='2'></polygon>";
-  });
-  svg += "</svg>";
-  return svg;
+function renderCoachChat() {
+  var log = document.getElementById("coachChatLog");
+  log.innerHTML = coachChat.map(function (m) {
+    return "<div class='coach-bubble " + (m.role === "user" ? "user" : "assistant") + "'>" + escapeHtml(m.text) + "</div>";
+  }).join("");
+  log.scrollTop = log.scrollHeight;
 }
-function renderAnalytics() {
-  document.getElementById("radarChartContainer").innerHTML = buildRadarSVG();
+function coachAsk(text) {
+  coachChat.push({ role: "user", text: text });
+  coachChat.push({ role: "assistant", text: coachAnswer(text) });
+  saveData(STORAGE_KEYS.coachChat, coachChat);
+  renderCoachChat();
 }
+document.querySelectorAll(".coach-quick-btn").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var labels = {
+      today: "What should I study today?",
+      backlog: "Check my backlog",
+      readiness: "Exam Readiness",
+      burnout: "Burnout check"
+    };
+    coachAsk(labels[btn.dataset.q] || btn.textContent);
+  });
+});
+document.getElementById("coachSendBtn").addEventListener("click", function () {
+  var input = document.getElementById("coachInput");
+  var text = input.value.trim();
+  if (!text) return;
+  coachAsk(text);
+  input.value = "";
+});
 
 document.querySelectorAll(".nav-item").forEach(function (btn) {
   btn.addEventListener("click", function () {
@@ -1167,9 +1162,9 @@ document.querySelectorAll(".nav-item").forEach(function (btn) {
     document.querySelectorAll(".view").forEach(function (v) { v.style.display = "none"; });
     document.getElementById("view-" + tab).style.display = "";
     if (tab === "syllabus") renderChapters();
-    if (tab === "dailylog") { renderLogChapterChips(); updateStopwatchDisplay(); updatePomodoroDisplay(); renderPomodoroCount(); }
+    if (tab === "dailylog") { renderLogChapterChips(); updateStopwatchDisplay(); startStopwatchInterval(); updatePomodoroDisplay(); startPomodoroInterval(); }
     if (tab === "tests") renderTests();
-    if (tab === "analytics") renderAnalytics();
+    if (tab === "aicoach") renderCoachChat();
   });
 });
 
@@ -1177,7 +1172,8 @@ function renderAll() {
   escalatePendingTaskPriorities();
   renderStreak(); renderCountdowns(); renderPhases(); renderGoal(); renderStats();
   renderInsight(); renderTasks(); renderMiniChapterLists(); renderSessions();
-  updateStopwatchDisplay(); updatePomodoroDisplay(); renderPomodoroCount();
+  updateStopwatchDisplay(); startStopwatchInterval();
+  updatePomodoroDisplay(); startPomodoroInterval();
 }
 renderAll();
 renderChapters();
