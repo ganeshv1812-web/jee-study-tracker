@@ -65,7 +65,7 @@ var MATH_CHAPTERS = [
   "Coordinate Geometry","Three Dimensional Geometry","Vector Algebra","Statistics and Probability","Trigonometry"
 ];
 var STATUSES = ["Not Started", "In Progress", "Completed"];
-var REVISION_OFFSETS = [3, 7, 15, 30];
+var REVISION_OFFSETS = [7, 14, 30, 60, 120, 240];
 var PRIORITY_WEIGHT = { High: 0, Medium: 1, Low: 2 };
 
 var tasks = loadData(STORAGE_KEYS.tasks, []);
@@ -112,7 +112,9 @@ function makeChapter(subject, name) {
     id: subject + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
     subject: subject, name: name, subtopics: [], startDate: "", target: "", completionDate: "",
     progress: 0, status: "Not Started",
-    revisions: [false, false, false, false], notes: "", lecturesDone: 0, lecturesTotal: 0
+    revisions: [false, false, false, false, false, false],
+    customRevisions: [],
+    notes: "", lecturesDone: 0, lecturesTotal: 0
   };
 }
 
@@ -136,6 +138,13 @@ chapters.forEach(function (c) {
   if (typeof c.lecturesTotal === "undefined") c.lecturesTotal = 0;
   if (typeof c.startDate === "undefined") c.startDate = "";
   if (typeof c.completionDate === "undefined") c.completionDate = "";
+  if (!c.revisions || c.revisions.length < 6) {
+    var old = c.revisions || [];
+    var padded = [];
+    for (var i = 0; i < 6; i++) padded.push(old[i] || false);
+    c.revisions = padded;
+  }
+  if (!c.customRevisions) c.customRevisions = [];
   if (c.status === "Delayed" || c.status === "Revision Due") c.status = "In Progress";
 });
 saveData(STORAGE_KEYS.chapters, chapters);
@@ -187,13 +196,20 @@ function computeDisplayStatus(ch) {
     if (ch.completionDate) {
       var completionD = parseDateStr(ch.completionDate);
       if (completionD) {
-        for (var i = 0; i < 4; i++) {
+        for (var i = 0; i < 6; i++) {
           if (!ch.revisions[i]) {
             var due = new Date(completionD);
             due.setDate(due.getDate() + REVISION_OFFSETS[i]);
             if (today >= due) return "Revision Due";
           }
         }
+      }
+    }
+    var custom = ch.customRevisions || [];
+    for (var j = 0; j < custom.length; j++) {
+      if (!custom[j].done) {
+        var cd = parseDateStr(custom[j].date);
+        if (cd && today >= cd) return "Revision Due";
       }
     }
     return "Completed";
@@ -214,6 +230,13 @@ function isRevisionOverdue(ch, index) {
   return todayMidnight() >= due;
 }
 
+function isCustomRevisionOverdue(cr) {
+  if (cr.done) return false;
+  var d = parseDateStr(cr.date);
+  if (!d) return false;
+  return todayMidnight() >= d;
+}
+
 function updateStreak() {
   var today = todayStr();
   if (streak.lastDate === today) return;
@@ -222,7 +245,11 @@ function updateStreak() {
   streak.lastDate = today;
   saveData(STORAGE_KEYS.streak, streak);
 }
-function renderStreak() { document.getElementById("streakCount").textContent = streak.count; }
+function renderStreak() {
+  document.getElementById("streakCount").textContent = streak.count;
+  var analyticsStreakEl = document.getElementById("analyticsStreak");
+  if (analyticsStreakEl) analyticsStreakEl.textContent = streak.count;
+}
 
 function daysBetween(dateStr) {
   var target = parseDateStr(dateStr);
@@ -371,7 +398,35 @@ function escalatePendingTaskPriorities() {
   if (changed) saveData(STORAGE_KEYS.tasks, tasks);
 }
 
+function getVirtualRevisionTasks() {
+  var virtual = [];
+  chapters.forEach(function (ch) {
+    for (var i = 0; i < 6; i++) {
+      if (isRevisionOverdue(ch, i)) {
+        virtual.push({
+          id: "revtask::" + ch.id + "::" + i,
+          text: ch.name + " - R" + (i + 1) + " revision overdue",
+          subject: ch.subject, priority: "High", minutes: 0, done: false,
+          virtual: true, virtualType: "fixed", chapterId: ch.id, revIndex: i
+        });
+      }
+    }
+    (ch.customRevisions || []).forEach(function (cr) {
+      if (isCustomRevisionOverdue(cr)) {
+        virtual.push({
+          id: "crevtask::" + ch.id + "::" + cr.id,
+          text: ch.name + " - custom revision overdue",
+          subject: ch.subject, priority: "High", minutes: 0, done: false,
+          virtual: true, virtualType: "custom", chapterId: ch.id, customId: cr.id
+        });
+      }
+    });
+  });
+  return virtual;
+}
+
 function sortedTasks() {
+  var virtual = getVirtualRevisionTasks();
   var pending = tasks.filter(function (t) { return !t.done; });
   var done = tasks.filter(function (t) { return t.done; });
   pending.sort(function (a, b) {
@@ -379,7 +434,7 @@ function sortedTasks() {
     var wb = PRIORITY_WEIGHT[b.priority] === undefined ? 1 : PRIORITY_WEIGHT[b.priority];
     return wa - wb;
   });
-  return pending.concat(done);
+  return virtual.concat(pending).concat(done);
 }
 
 function priorityDotClass(priority) {
@@ -389,22 +444,24 @@ function priorityDotClass(priority) {
 }
 
 function renderTasks() {
-  var pendingCount = tasks.filter(function (t) { return !t.done; }).length;
-  document.getElementById("todoCount").textContent = pendingCount;
+  var realPendingCount = tasks.filter(function (t) { return !t.done; }).length;
+  var virtualCount = getVirtualRevisionTasks().length;
+  document.getElementById("pendingCount").textContent = realPendingCount + virtualCount;
   var list = document.getElementById("taskList");
-  if (tasks.length === 0) {
+  var ordered = sortedTasks();
+  if (ordered.length === 0) {
     list.innerHTML = "<li class='empty'>No tasks yet. Tap + Add Task above.</li>";
     return;
   }
-  var ordered = sortedTasks();
   list.innerHTML = ordered.map(function (task) {
     var metaBits = [];
     if (task.subject) metaBits.push("<span>" + escapeHtml(task.subject) + "</span>");
     if (task.priority) metaBits.push("<span>" + escapeHtml(task.priority) + "</span>");
     if (task.minutes) metaBits.push("<span>" + task.minutes + " mins</span>");
-    return "<li class='task-item" + (task.done ? " done" : "") + "'>" +
+    var deleteBtn = task.virtual ? "" : "<button class='task-delete' data-id='" + task.id + "'>&#10005;</button>";
+    return "<li class='task-item" + (task.done ? " done" : "") + (task.virtual ? " virtual" : "") + "'>" +
       "<label class='task-check'>" +
-      "<input type='checkbox' " + (task.done ? "checked" : "") + " data-id='" + task.id + "'>" +
+      "<input type='checkbox' " + (task.done ? "checked" : "") + " data-id='" + task.id + "' data-virtual='" + (task.virtual ? "1" : "0") + "'>" +
       "<span class='task-body'>" +
       "<span class='task-text'>" + escapeHtml(task.text) + "</span>" +
       "<span class='task-meta'>" + metaBits.join(" &middot; ") + "</span>" +
@@ -412,7 +469,7 @@ function renderTasks() {
       "</label>" +
       "<span class='task-right'>" +
       "<span class='" + priorityDotClass(task.priority) + "'></span>" +
-      "<button class='task-delete' data-id='" + task.id + "'>&#10005;</button>" +
+      deleteBtn +
       "</span>" +
       "</li>";
   }).join("");
@@ -422,7 +479,28 @@ document.getElementById("taskList").addEventListener("click", function (e) {
   var cb = e.target.matches("input[type='checkbox']") ? e.target : null;
   var delBtn = e.target.closest(".task-delete");
   if (cb) {
-    var task = tasks.find(function (t) { return t.id === cb.dataset.id; });
+    var id = cb.dataset.id;
+    if (cb.dataset.virtual === "1") {
+      if (id.indexOf("revtask::") === 0) {
+        var parts = id.split("::");
+        var ch = chapters.find(function (c) { return c.id === parts[1]; });
+        if (ch) {
+          ch.revisions[parseInt(parts[2], 10)] = true;
+          saveData(STORAGE_KEYS.chapters, chapters);
+          showToast("Revision marked complete");
+        }
+      } else if (id.indexOf("crevtask::") === 0) {
+        var parts2 = id.split("::");
+        var ch2 = chapters.find(function (c) { return c.id === parts2[1]; });
+        if (ch2) {
+          var cr = (ch2.customRevisions || []).find(function (c) { return c.id === parts2[2]; });
+          if (cr) { cr.done = true; saveData(STORAGE_KEYS.chapters, chapters); showToast("Revision marked complete"); }
+        }
+      }
+      renderTasks(); renderMiniChapterLists(); renderChapters(); renderInsight();
+      return;
+    }
+    var task = tasks.find(function (t) { return t.id === id; });
     if (task) {
       var wasDone = task.done;
       task.done = cb.checked;
@@ -445,8 +523,8 @@ document.getElementById("taskList").addEventListener("click", function (e) {
         saveData(STORAGE_KEYS.sessions, sessions);
         renderSessions(); renderStats(); renderInsight();
       }
+      saveData(STORAGE_KEYS.tasks, tasks);
     }
-    saveData(STORAGE_KEYS.tasks, tasks);
     renderTasks();
   } else if (delBtn) {
     tasks = tasks.filter(function (t) { return t.id !== delBtn.dataset.id; });
@@ -518,6 +596,13 @@ function renderChapters() {
     var displayStatus = computeDisplayStatus(ch);
     var subtopicsHtml = (ch.subtopics && ch.subtopics.length)
       ? "<div class='subtopics-row'>" + ch.subtopics.map(function (s) { return "<span>&bull; " + escapeHtml(s) + "</span>"; }).join(" ") + "</div>" : "";
+    var customChipsHtml = (ch.customRevisions || []).map(function (cr) {
+      var cls = "custom-revision-chip" + (cr.done ? " done" : "") + (isCustomRevisionOverdue(cr) ? " overdue" : "");
+      return "<span class='" + cls + "'>" +
+        "<button class='custom-revision-toggle' data-id='" + ch.id + "' data-crid='" + cr.id + "'>" + cr.date + "</button>" +
+        "<button class='custom-revision-delete' data-id='" + ch.id + "' data-crid='" + cr.id + "'>&#10005;</button>" +
+        "</span>";
+    }).join("");
     return "<div class='chapter-card'>" +
       "<div class='chapter-top'>" +
       "<div class='chapter-title'>" + escapeHtml(ch.name) + "</div>" +
@@ -544,10 +629,15 @@ function renderChapters() {
       "<input type='number' class='lecture-input lecture-total-input' data-id='" + ch.id + "' min='0' value='" + ch.lecturesTotal + "'>" +
       "</div>" +
       "<div class='revision-row'>" +
-      [0, 1, 2, 3].map(function (i) {
+      [0, 1, 2, 3, 4, 5].map(function (i) {
         var cls = "revision-chip" + (ch.revisions[i] ? " done" : "") + (isRevisionOverdue(ch, i) ? " overdue" : "");
         return "<button class='" + cls + "' data-id='" + ch.id + "' data-rev='" + i + "'>R" + (i + 1) + "</button>";
       }).join("") +
+      "</div>" +
+      (customChipsHtml ? "<div class='revision-row'>" + customChipsHtml + "</div>" : "") +
+      "<div class='custom-revision-row'>" +
+      "<input type='date' class='custom-revision-date-input' data-id='" + ch.id + "'>" +
+      "<button class='btn-text add-custom-revision-btn' data-id='" + ch.id + "'>+ Custom Revision</button>" +
       "</div>" +
       "<div class='status-btn-row'>" +
       STATUSES.map(function (s) {
@@ -572,8 +662,8 @@ document.getElementById("chapterForm").addEventListener("submit", function (e) {
     id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
     subject: currentSubject, name: name, subtopics: subtopics,
     startDate: startInput.value || "", target: targetInput.value || "", completionDate: "",
-    progress: 0, status: "Not Started", revisions: [false, false, false, false], notes: "",
-    lecturesDone: 0, lecturesTotal: 0
+    progress: 0, status: "Not Started", revisions: [false, false, false, false, false, false],
+    customRevisions: [], notes: "", lecturesDone: 0, lecturesTotal: 0
   });
   saveData(STORAGE_KEYS.chapters, chapters);
   nameInput.value = ""; subtopicsInput.value = ""; startInput.value = ""; targetInput.value = "";
@@ -585,6 +675,9 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
   var delBtn = e.target.closest(".chapter-delete");
   var revBtn = e.target.closest(".revision-chip");
   var statusBtn = e.target.closest(".status-btn");
+  var crToggle = e.target.closest(".custom-revision-toggle");
+  var crDelete = e.target.closest(".custom-revision-delete");
+  var addCrBtn = e.target.closest(".add-custom-revision-btn");
   if (delBtn) {
     chapters = chapters.filter(function (c) { return c.id !== delBtn.dataset.id; });
   } else if (revBtn) {
@@ -598,6 +691,24 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
         ch2.progress = 100;
         if (!ch2.completionDate) ch2.completionDate = todayStr();
       }
+    }
+  } else if (crToggle) {
+    var ch3 = chapters.find(function (c) { return c.id === crToggle.dataset.id; });
+    if (ch3) {
+      var cr3 = (ch3.customRevisions || []).find(function (c) { return c.id === crToggle.dataset.crid; });
+      if (cr3) cr3.done = !cr3.done;
+    }
+  } else if (crDelete) {
+    var ch4 = chapters.find(function (c) { return c.id === crDelete.dataset.id; });
+    if (ch4) ch4.customRevisions = (ch4.customRevisions || []).filter(function (c) { return c.id !== crDelete.dataset.crid; });
+  } else if (addCrBtn) {
+    var ch5 = chapters.find(function (c) { return c.id === addCrBtn.dataset.id; });
+    var dateInput = document.querySelector(".custom-revision-date-input[data-id='" + addCrBtn.dataset.id + "']");
+    if (ch5 && dateInput && dateInput.value) {
+      if (!ch5.customRevisions) ch5.customRevisions = [];
+      ch5.customRevisions.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: dateInput.value, done: false });
+    } else {
+      return;
     }
   } else { return; }
   saveData(STORAGE_KEYS.chapters, chapters);
@@ -796,20 +907,24 @@ document.getElementById("stopwatchUseBtn").addEventListener("click", function ()
   showToast("Stopwatch time applied: " + mins + " mins");
 });
 
+var POMODORO_WORK_MS = 50 * 60 * 1000;
+var POMODORO_BREAK_MS = 10 * 60 * 1000;
 var pomodoroRunning = false;
-var pomodoroInterval = null;
 var pomodoroMode = "work";
-var pomodoroWorkSeconds = 25 * 60;
-var pomodoroBreakSeconds = 5 * 60;
-var pomodoroRemaining = pomodoroWorkSeconds;
+var pomodoroEndTime = 0;
+var pomodoroRemainingMs = POMODORO_WORK_MS;
+var pomodoroInterval = null;
 
-function formatPomodoro(totalSeconds) {
+function formatPomodoro(totalMs) {
+  var totalSeconds = Math.max(0, Math.ceil(totalMs / 1000));
   var m = Math.floor(totalSeconds / 60);
   var s = totalSeconds % 60;
   return pad2(m) + ":" + pad2(s);
 }
 function updatePomodoroDisplay() {
-  document.getElementById("pomodoroDisplay").textContent = formatPomodoro(pomodoroRemaining);
+  var remaining = pomodoroRunning ? (pomodoroEndTime - Date.now()) : pomodoroRemainingMs;
+  if (remaining < 0) remaining = 0;
+  document.getElementById("pomodoroDisplay").textContent = formatPomodoro(remaining);
   document.getElementById("pomodoroMode").textContent = pomodoroMode === "work" ? "Work Session" : "Break";
 }
 function ensurePomodoroCountToday() {
@@ -823,8 +938,9 @@ function renderPomodoroCount() {
   document.getElementById("pomodoroCount").textContent = pomodoroCountData.count;
 }
 function pomodoroTick() {
-  pomodoroRemaining -= 1;
-  if (pomodoroRemaining <= 0) {
+  if (!pomodoroRunning) return;
+  var remaining = pomodoroEndTime - Date.now();
+  if (remaining <= 0) {
     if (pomodoroMode === "work") {
       ensurePomodoroCountToday();
       pomodoroCountData.count += 1;
@@ -832,25 +948,30 @@ function pomodoroTick() {
       renderPomodoroCount();
       showToast("Work session complete. Time for a break.");
       pomodoroMode = "break";
-      pomodoroRemaining = pomodoroBreakSeconds;
+      pomodoroRemainingMs = POMODORO_BREAK_MS;
     } else {
       showToast("Break over. Back to work.");
       pomodoroMode = "work";
-      pomodoroRemaining = pomodoroWorkSeconds;
+      pomodoroRemainingMs = POMODORO_WORK_MS;
     }
+    pomodoroEndTime = Date.now() + pomodoroRemainingMs;
   }
   updatePomodoroDisplay();
 }
 document.getElementById("pomodoroStartBtn").addEventListener("click", function () {
   if (pomodoroRunning) return;
   pomodoroRunning = true;
+  pomodoroEndTime = Date.now() + pomodoroRemainingMs;
   pomodoroInterval = setInterval(pomodoroTick, 1000);
   document.getElementById("pomodoroStartBtn").disabled = true;
   document.getElementById("pomodoroPauseBtn").disabled = false;
 });
 document.getElementById("pomodoroPauseBtn").addEventListener("click", function () {
+  if (!pomodoroRunning) return;
+  pomodoroRemainingMs = Math.max(0, pomodoroEndTime - Date.now());
   pomodoroRunning = false;
   clearInterval(pomodoroInterval);
+  updatePomodoroDisplay();
   document.getElementById("pomodoroStartBtn").disabled = false;
   document.getElementById("pomodoroPauseBtn").disabled = true;
 });
@@ -858,10 +979,18 @@ document.getElementById("pomodoroResetBtn").addEventListener("click", function (
   pomodoroRunning = false;
   clearInterval(pomodoroInterval);
   pomodoroMode = "work";
-  pomodoroRemaining = pomodoroWorkSeconds;
+  pomodoroRemainingMs = POMODORO_WORK_MS;
   updatePomodoroDisplay();
   document.getElementById("pomodoroStartBtn").disabled = false;
   document.getElementById("pomodoroPauseBtn").disabled = true;
+});
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) {
+    updateStopwatchDisplay();
+    if (pomodoroRunning) pomodoroTick();
+    updatePomodoroDisplay();
+  }
 });
 
 function renderMistakeClassification() {
@@ -958,6 +1087,76 @@ document.getElementById("saveTestBtn").addEventListener("click", function () {
   showToast("Test logged");
 });
 
+function computeSubjectAnalytics(subject) {
+  var subChapters = chapters.filter(function (c) { return c.subject === subject; });
+  if (subChapters.length === 0) return { completion: 0, lecture: 0, revision: 0 };
+  var completion = subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length;
+  var lectureTotals = subChapters.reduce(function (acc, c) {
+    acc.done += c.lecturesDone || 0; acc.total += c.lecturesTotal || 0; return acc;
+  }, { done: 0, total: 0 });
+  var lecture = lectureTotals.total > 0 ? (lectureTotals.done / lectureTotals.total) * 100 : 0;
+  var completedChapters = subChapters.filter(function (c) { return c.status === "Completed"; });
+  var revisionScore = 0;
+  if (completedChapters.length > 0) {
+    var totalDue = 0, totalDone = 0;
+    completedChapters.forEach(function (c) {
+      for (var i = 0; i < 6; i++) {
+        var completionD = parseDateStr(c.completionDate);
+        if (completionD) {
+          var due = new Date(completionD);
+          due.setDate(due.getDate() + REVISION_OFFSETS[i]);
+          if (todayMidnight() >= due) {
+            totalDue += 1;
+            if (c.revisions[i]) totalDone += 1;
+          }
+        }
+      }
+    });
+    revisionScore = totalDue > 0 ? (totalDone / totalDue) * 100 : 100;
+  }
+  return { completion: Math.round(completion), lecture: Math.round(lecture), revision: Math.round(revisionScore) };
+}
+
+function polarPoint(cx, cy, radius, angleDeg) {
+  var rad = (angleDeg * Math.PI) / 180;
+  return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+}
+function buildRadarSVG() {
+  var cx = 110, cy = 100, maxR = 80;
+  var angles = [-90, 30, 150];
+  var labels = ["Completion", "Lecture", "Revision"];
+  var subjects = [
+    { name: "Physics", color: "#22d3ee", data: computeSubjectAnalytics("Physics") },
+    { name: "Chemistry", color: "#10b981", data: computeSubjectAnalytics("Chemistry") },
+    { name: "Mathematics", color: "#ff9800", data: computeSubjectAnalytics("Mathematics") }
+  ];
+  var svg = "<svg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'>";
+  [0.25, 0.5, 0.75, 1].forEach(function (frac) {
+    var pts = angles.map(function (a) { var p = polarPoint(cx, cy, maxR * frac, a); return p.x + "," + p.y; }).join(" ");
+    svg += "<polygon points='" + pts + "' fill='none' stroke='#2a2a2a' stroke-width='1'></polygon>";
+  });
+  angles.forEach(function (a, i) {
+    var p = polarPoint(cx, cy, maxR, a);
+    svg += "<line x1='" + cx + "' y1='" + cy + "' x2='" + p.x + "' y2='" + p.y + "' stroke='#2a2a2a' stroke-width='1'></line>";
+    var lp = polarPoint(cx, cy, maxR + 16, a);
+    svg += "<text x='" + lp.x + "' y='" + lp.y + "' fill='#a0a0a0' font-size='10' text-anchor='middle'>" + labels[i] + "</text>";
+  });
+  subjects.forEach(function (subj) {
+    var values = [subj.data.completion, subj.data.lecture, subj.data.revision];
+    var pts = angles.map(function (a, i) {
+      var frac = Math.max(0, Math.min(100, values[i])) / 100;
+      var p = polarPoint(cx, cy, maxR * frac, a);
+      return p.x + "," + p.y;
+    }).join(" ");
+    svg += "<polygon points='" + pts + "' fill='" + subj.color + "' fill-opacity='0.15' stroke='" + subj.color + "' stroke-width='2'></polygon>";
+  });
+  svg += "</svg>";
+  return svg;
+}
+function renderAnalytics() {
+  document.getElementById("radarChartContainer").innerHTML = buildRadarSVG();
+}
+
 document.querySelectorAll(".nav-item").forEach(function (btn) {
   btn.addEventListener("click", function () {
     if (btn.dataset.soon) { showToast("Coming in the next build phase"); return; }
@@ -970,6 +1169,7 @@ document.querySelectorAll(".nav-item").forEach(function (btn) {
     if (tab === "syllabus") renderChapters();
     if (tab === "dailylog") { renderLogChapterChips(); updateStopwatchDisplay(); updatePomodoroDisplay(); renderPomodoroCount(); }
     if (tab === "tests") renderTests();
+    if (tab === "analytics") renderAnalytics();
   });
 });
 
@@ -989,4 +1189,4 @@ renderLogChapterChips();
     banner.style.display = "block";
     banner.textContent = "App error: " + err.message;
   }
-    }
+}
