@@ -95,7 +95,7 @@
 
       <section class="card">
         <div class="card-header-row">
-          <h2>To-Do Today (<span id="todoCount">0</span>)</h2>
+          <h2>Pending Tasks (<span id="pendingCount">0</span>)</h2>
           <button type="button" id="openTaskModalBtn" class="btn-primary btn-small-add">+ Add Task</button>
         </div>
         <ul id="taskList" class="task-list"></ul>
@@ -160,9 +160,9 @@
       </section>
 
       <section class="card">
-        <div class="card-header"><h2>Pomodoro Timer</h2></div>
+        <div class="card-header"><h2>Pomodoro Timer (50 / 10)</h2></div>
         <div class="pomodoro-mode" id="pomodoroMode">Work Session</div>
-        <div class="timer-display" id="pomodoroDisplay">25:00</div>
+        <div class="timer-display" id="pomodoroDisplay">50:00</div>
         <div class="timer-controls">
           <button type="button" id="pomodoroStartBtn" class="btn-primary">Start</button>
           <button type="button" id="pomodoroPauseBtn" class="btn-secondary" disabled>Pause</button>
@@ -236,6 +236,27 @@
       </section>
     </section>
 
+    <section id="view-analytics" class="view" style="display:none;">
+      <section class="card">
+        <div class="card-header"><h2>Streak &amp; Consistency</h2></div>
+        <div class="analytics-streak-row">
+          <div class="analytics-streak-value" id="analyticsStreak">0</div>
+          <div class="analytics-streak-label">Day Streak</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Subject Radar</h2></div>
+        <div id="radarChartContainer"></div>
+        <div class="radar-legend">
+          <span class="legend-item"><span class="legend-dot legend-physics"></span>Physics</span>
+          <span class="legend-item"><span class="legend-dot legend-chemistry"></span>Chemistry</span>
+          <span class="legend-item"><span class="legend-dot legend-math"></span>Mathematics</span>
+        </div>
+        <div class="radar-note">Axes: Completion % &middot; Lecture Coverage % &middot; Revision Compliance %</div>
+      </section>
+    </section>
+
   </main>
 
   <nav class="bottom-nav">
@@ -244,7 +265,7 @@
     <button class="nav-item" data-tab="dailylog">🕐<span>Daily Log</span></button>
     <button class="nav-item" data-tab="tests">📊<span>Tests</span></button>
     <button class="nav-item" data-soon="1">🤖<span>AI Coach</span></button>
-    <button class="nav-item" data-soon="1">📈<span>Analytics</span></button>
+    <button class="nav-item" data-tab="analytics">📈<span>Analytics</span></button>
   </nav>
 
   <div id="toast" class="toast"></div>
@@ -313,4 +334,4 @@
 </div>
 <script src="app.js"></script>
 </body>
-  </html>
+</html>
