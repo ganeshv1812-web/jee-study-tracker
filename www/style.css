@@ -147,6 +147,7 @@ body {
 .session-subject { font-size: 14px; font-weight: 600; }
 .session-minutes { color: var(--accent-cyan); font-weight: 700; font-size: 14px; }
 .empty { color: var(--text-secondary); font-size: 13px; padding: 8px 0; text-align: center; }
+.empty-inline { font-size: 11px; color: var(--text-secondary); }
 .bottom-nav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -269,6 +270,14 @@ body {
 .revision-offsets-row { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
 .revision-offset-field { display: flex; flex-direction: column; align-items: center; font-size: 9px; color: var(--text-secondary); }
 .revision-offset-field input { width: 40px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 4px; border-radius: 6px; font-size: 10px; text-align: center; margin-top: 2px; }
+.extra-revisions-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.extra-revision-chip { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; font-size: 11px; color: var(--text-secondary); }
+.extra-revision-chip.done { border-color: var(--accent-amber); color: var(--accent-amber); }
+.extra-revision-chip.overdue { border-color: var(--accent-red); color: var(--accent-red); }
+.extra-revision-toggle, .extra-revision-delete { background: none; border: none; color: inherit; font-size: 12px; padding: 0 2px; }
+.add-revision-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.add-revision-row input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; }
+.add-revision-row button { background: var(--accent-cyan); color: #000; border: none; border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .status-btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .status-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 6px 10px; border-radius: 8px; }
 .status-btn.active { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(34,211,238,0.1); }
@@ -324,10 +333,12 @@ body {
 .test-error-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .test-error-chip { background: var(--surface); border: 1px solid var(--border); font-size: 10px; padding: 3px 8px; border-radius: 8px; color: var(--text-secondary); }
 
+.provider-fields { margin-bottom: 10px; }
+.ai-hint { font-size: 10px; color: var(--text-secondary); margin-bottom: 8px; }
 .coach-quick-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .coach-quick-btn { background: var(--surface-2); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); font-size: 12px; padding: 8px 12px; border-radius: 999px; font-weight: 600; }
 .coach-chat-log { display: flex; flex-direction: column; gap: 10px; padding: 0 4px 16px; min-height: 100px; }
-.coach-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
+.coach-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
 .coach-bubble.user { align-self: flex-end; background: rgba(255,152,0,0.15); border: 1px solid var(--accent-amber); color: var(--text-primary); }
 .coach-bubble.assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); }
 .coach-input-row { display: flex; gap: 8px; padding: 0 4px; }
@@ -378,3 +389,24 @@ body {
 .error-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 6px; }
 .error-grid label { font-size: 9px; color: var(--text-secondary); display: block; text-align: center; margin-bottom: 2px; }
 .error-grid input { padding: 8px 2px !important; text-align: center; font-size: 12px; }
+
+#view-aicoach select {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+#view-aicoach input[type="text"], #view-aicoach input[type="password"] {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  margin-bottom: 4px;
+             }
