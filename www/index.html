@@ -89,8 +89,8 @@
       </section>
 
       <section class="insight-card">
-        <div class="insight-title">🤖 AI Academic Coach Insight</div>
-        <div class="insight-text" id="coachInsight">Log a study session to get your first insight.</div>
+        <div class="insight-title">📌 Quick Status</div>
+        <div class="insight-text" id="coachInsight">Log a study session to get your first status update.</div>
       </section>
 
       <section class="card">
@@ -244,6 +244,40 @@
 
     <section id="view-aicoach" class="view" style="display:none;">
       <section class="card">
+        <div class="card-header"><h2>AI Provider Settings</h2></div>
+        <div class="field-label">Provider</div>
+        <select id="aiProviderSelect">
+          <option value="gemini">Google Gemini (free tier available)</option>
+          <option value="openai">OpenAI</option>
+          <option value="claude">Anthropic Claude</option>
+        </select>
+
+        <div id="providerFields-gemini" class="provider-fields">
+          <div class="field-label">Gemini API Key</div>
+          <input type="password" id="apiKey-gemini" placeholder="Paste your Gemini API key">
+          <div class="field-label">Model</div>
+          <input type="text" id="model-gemini" placeholder="gemini-flash-latest">
+          <div class="ai-hint">Free key at aistudio.google.com/apikey</div>
+        </div>
+        <div id="providerFields-openai" class="provider-fields" style="display:none;">
+          <div class="field-label">OpenAI API Key</div>
+          <input type="password" id="apiKey-openai" placeholder="Paste your OpenAI API key">
+          <div class="field-label">Model</div>
+          <input type="text" id="model-openai" placeholder="gpt-5-mini">
+          <div class="ai-hint">Key at platform.openai.com/api-keys (billing required)</div>
+        </div>
+        <div id="providerFields-claude" class="provider-fields" style="display:none;">
+          <div class="field-label">Anthropic API Key</div>
+          <input type="password" id="apiKey-claude" placeholder="Paste your Anthropic API key">
+          <div class="field-label">Model</div>
+          <input type="text" id="model-claude" placeholder="claude-sonnet-5">
+          <div class="ai-hint">Key at console.anthropic.com/settings/keys (billing required)</div>
+        </div>
+
+        <button type="button" id="saveAiConfigBtn" class="btn-primary btn-block">Save AI Settings</button>
+      </section>
+
+      <section class="card">
         <div class="card-header"><h2>AI Academic Coach</h2></div>
         <div class="coach-quick-row">
           <button type="button" class="coach-quick-btn" data-q="today">What should I study today?</button>
@@ -336,4 +370,4 @@
 </div>
 <script src="app.js"></script>
 </body>
-            </html>
+          </html>
