@@ -31,7 +31,8 @@ var STORAGE_KEYS = {
   pomodoroCount: "jee_pomodoro_count",
   pomodoroState: "jee_pomodoro_state",
   stopwatchState: "jee_stopwatch_state",
-  coachChat: "jee_coach_chat"
+  coachChat: "jee_coach_chat",
+  aiConfig: "jee_ai_config"
 };
 
 function loadData(key, fallback) {
@@ -72,6 +73,11 @@ var DEFAULT_REVISION_OFFSETS = [7, 14, 30, 60, 120, 240];
 var PRIORITY_WEIGHT = { High: 0, Medium: 1, Low: 2 };
 var POMODORO_WORK_MINUTES = 50;
 var POMODORO_BREAK_MINUTES = 10;
+var PROVIDER_DEFAULTS = {
+  openai: { model: "gpt-5-mini" },
+  gemini: { model: "gemini-flash-latest" },
+  claude: { model: "claude-sonnet-5" }
+};
 
 var tasks = loadData(STORAGE_KEYS.tasks, []);
 var sessions = loadData(STORAGE_KEYS.sessions, []);
@@ -120,6 +126,7 @@ function makeChapter(subject, name) {
     progress: 0, status: "Not Started",
     revisions: [false, false, false, false, false, false],
     revisionOffsets: DEFAULT_REVISION_OFFSETS.slice(),
+    extraRevisions: [],
     notes: "", lecturesDone: 0, lecturesTotal: 0
   };
 }
@@ -145,6 +152,7 @@ chapters.forEach(function (c) {
   if (typeof c.startDate === "undefined") c.startDate = "";
   if (typeof c.completionDate === "undefined") c.completionDate = "";
   if (!c.revisionOffsets || c.revisionOffsets.length !== 6) c.revisionOffsets = DEFAULT_REVISION_OFFSETS.slice();
+  if (!c.extraRevisions) c.extraRevisions = [];
   if (!c.revisions || c.revisions.length !== 6) {
     var old = c.revisions || [];
     var next = [false, false, false, false, false, false];
@@ -196,6 +204,13 @@ function todayMidnight() {
   return now;
 }
 
+function isExtraRevisionOverdue(rev) {
+  if (!rev || rev.done || !rev.date) return false;
+  var d = parseDateStr(rev.date);
+  if (!d) return false;
+  return todayMidnight() >= d;
+}
+
 function computeDisplayStatus(ch) {
   var today = todayMidnight();
   if (ch.status === "Completed") {
@@ -209,6 +224,11 @@ function computeDisplayStatus(ch) {
             if (today >= due) return "Revision Due";
           }
         }
+      }
+    }
+    if (ch.extraRevisions && ch.extraRevisions.length) {
+      for (var j = 0; j < ch.extraRevisions.length; j++) {
+        if (isExtraRevisionOverdue(ch.extraRevisions[j])) return "Revision Due";
       }
     }
     return "Completed";
@@ -311,6 +331,16 @@ function renderStats() {
   document.getElementById("chaptersDone").textContent = completedCount + "/" + chapters.length;
 }
 
+function coachSubjectReadiness() {
+  var result = {};
+  ["Physics", "Chemistry", "Mathematics"].forEach(function (sub) {
+    var subChapters = chapters.filter(function (c) { return c.subject === sub; });
+    if (subChapters.length === 0) { result[sub] = 0; return; }
+    result[sub] = Math.round(subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length);
+  });
+  return result;
+}
+
 function renderInsight() {
   var el = document.getElementById("coachInsight");
   var today = todayStr();
@@ -318,17 +348,10 @@ function renderInsight() {
   var withDisplay = chapters.map(function (c) { return { ch: c, displayStatus: computeDisplayStatus(c) }; });
   var revisionDue = withDisplay.filter(function (x) { return x.displayStatus === "Revision Due"; });
   var delayed = withDisplay.filter(function (x) { return x.displayStatus === "Delayed"; });
-  var bySubjectProgress = {};
-  ["Physics", "Chemistry", "Mathematics"].forEach(function (sub) {
-    var subChapters = chapters.filter(function (c) { return c.subject === sub; });
-    if (subChapters.length > 0) {
-      bySubjectProgress[sub] = subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length;
-    }
-  });
-  var weakest = null;
-  Object.keys(bySubjectProgress).forEach(function (sub) {
-    if (weakest === null || bySubjectProgress[sub] < bySubjectProgress[weakest]) weakest = sub;
-  });
+  var readiness = coachSubjectReadiness();
+  var weakest = "Physics";
+  if (readiness.Chemistry < readiness[weakest]) weakest = "Chemistry";
+  if (readiness.Mathematics < readiness[weakest]) weakest = "Mathematics";
   var parts = [];
   parts.push(todayMinutes === 0
     ? "You have not logged any study time today yet."
@@ -336,7 +359,7 @@ function renderInsight() {
   if (streak.count > 0) parts.push("Your current streak is " + streak.count + " day" + (streak.count > 1 ? "s" : "") + ".");
   if (delayed.length > 0) parts.push(delayed[0].ch.name + " is delayed and needs attention.");
   else if (revisionDue.length > 0) parts.push(revisionDue[0].ch.name + " has a revision due.");
-  else if (weakest) parts.push(weakest + " has your lowest average progress, consider prioritizing it.");
+  else parts.push(weakest + " currently has your lowest average progress.");
   el.textContent = parts.join(" ");
 }
 
@@ -549,6 +572,16 @@ function renderChapters() {
     var displayStatus = computeDisplayStatus(ch);
     var subtopicsHtml = (ch.subtopics && ch.subtopics.length)
       ? "<div class='subtopics-row'>" + ch.subtopics.map(function (s) { return "<span>&bull; " + escapeHtml(s) + "</span>"; }).join(" ") + "</div>" : "";
+    var extraRevisionsHtml = (ch.extraRevisions && ch.extraRevisions.length)
+      ? ch.extraRevisions.map(function (rev) {
+        var cls = "extra-revision-chip" + (rev.done ? " done" : "") + (isExtraRevisionOverdue(rev) ? " overdue" : "");
+        return "<span class='" + cls + "'>" +
+          "<button class='extra-revision-toggle' data-id='" + ch.id + "' data-revid='" + rev.id + "'>" + (rev.done ? "&#10003;" : "&#9675;") + "</button>" +
+          "<span>" + rev.date + "</span>" +
+          "<button class='extra-revision-delete' data-id='" + ch.id + "' data-revid='" + rev.id + "'>&#10005;</button>" +
+          "</span>";
+      }).join("")
+      : "<span class='empty-inline'>No extra revisions added</span>";
     return "<div class='chapter-card'>" +
       "<div class='chapter-top'>" +
       "<div class='chapter-title'>" + escapeHtml(ch.name) + "</div>" +
@@ -585,6 +618,11 @@ function renderChapters() {
         return "<label class='revision-offset-field'>R" + (i + 1) + "d<input type='number' class='revision-offset-input' data-id='" + ch.id + "' data-rev='" + i + "' min='1' value='" + ch.revisionOffsets[i] + "'></label>";
       }).join("") +
       "</div>" +
+      "<div class='extra-revisions-row'>" + extraRevisionsHtml + "</div>" +
+      "<div class='add-revision-row'>" +
+      "<input type='date' class='extra-revision-date-input' data-id='" + ch.id + "'>" +
+      "<button type='button' class='add-extra-revision-btn' data-id='" + ch.id + "'>+ Add Revision Date</button>" +
+      "</div>" +
       "<div class='status-btn-row'>" +
       STATUSES.map(function (s) {
         return "<button class='status-btn " + (s === ch.status ? "active" : "") + "' data-id='" + ch.id + "' data-status='" + s + "'>" + s + "</button>";
@@ -611,6 +649,7 @@ document.getElementById("chapterForm").addEventListener("submit", function (e) {
     progress: 0, status: "Not Started",
     revisions: [false, false, false, false, false, false],
     revisionOffsets: DEFAULT_REVISION_OFFSETS.slice(),
+    extraRevisions: [],
     notes: "", lecturesDone: 0, lecturesTotal: 0
   });
   saveData(STORAGE_KEYS.chapters, chapters);
@@ -623,6 +662,39 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
   var delBtn = e.target.closest(".chapter-delete");
   var revBtn = e.target.closest(".revision-chip");
   var statusBtn = e.target.closest(".status-btn");
+  var extraToggle = e.target.closest(".extra-revision-toggle");
+  var extraDelete = e.target.closest(".extra-revision-delete");
+  var addExtraBtn = e.target.closest(".add-extra-revision-btn");
+
+  if (extraToggle) {
+    var chET = chapters.find(function (c) { return c.id === extraToggle.dataset.id; });
+    if (chET) {
+      var revT = chET.extraRevisions.find(function (r) { return r.id === extraToggle.dataset.revid; });
+      if (revT) revT.done = !revT.done;
+    }
+    saveData(STORAGE_KEYS.chapters, chapters);
+    renderChapters(); renderMiniChapterLists(); renderInsight();
+    return;
+  }
+  if (extraDelete) {
+    var chED = chapters.find(function (c) { return c.id === extraDelete.dataset.id; });
+    if (chED) chED.extraRevisions = chED.extraRevisions.filter(function (r) { return r.id !== extraDelete.dataset.revid; });
+    saveData(STORAGE_KEYS.chapters, chapters);
+    renderChapters(); renderMiniChapterLists();
+    return;
+  }
+  if (addExtraBtn) {
+    var chAdd = chapters.find(function (c) { return c.id === addExtraBtn.dataset.id; });
+    var card = addExtraBtn.closest(".chapter-card");
+    var dateInput = card ? card.querySelector(".extra-revision-date-input") : null;
+    if (chAdd && dateInput && dateInput.value) {
+      chAdd.extraRevisions.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: dateInput.value, done: false });
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists(); renderInsight();
+    }
+    return;
+  }
+
   if (delBtn) {
     chapters = chapters.filter(function (c) { return c.id !== delBtn.dataset.id; });
   } else if (revBtn) {
@@ -809,9 +881,7 @@ function ensureNotifPermission() {
   var LN = getLocalNotifications();
   if (!LN || notifPermissionRequested) return;
   notifPermissionRequested = true;
-  try {
-    LN.requestPermissions();
-  } catch (e) {}
+  try { LN.requestPermissions(); } catch (e) {}
 }
 function schedulePomodoroNotification(title, body, atTimestamp) {
   var LN = getLocalNotifications();
@@ -821,14 +891,7 @@ function schedulePomodoroNotification(title, body, atTimestamp) {
     return;
   }
   try {
-    LN.schedule({
-      notifications: [{
-        id: 9001,
-        title: title,
-        body: body,
-        schedule: { at: new Date(atTimestamp) }
-      }]
-    });
+    LN.schedule({ notifications: [{ id: 9001, title: title, body: body, schedule: { at: new Date(atTimestamp) } }] });
     if (noteEl) noteEl.textContent = "You'll get a notification even if you close the app.";
   } catch (e) {
     if (noteEl) noteEl.textContent = "Background alert unavailable on this build; keep the app open for alerts.";
@@ -1070,56 +1133,120 @@ document.getElementById("saveTestBtn").addEventListener("click", function () {
   showToast("Test logged");
 });
 
-function coachSubjectReadiness() {
-  var result = {};
-  ["Physics", "Chemistry", "Mathematics"].forEach(function (sub) {
-    var subChapters = chapters.filter(function (c) { return c.subject === sub; });
-    if (subChapters.length === 0) { result[sub] = 0; return; }
-    result[sub] = Math.round(subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length);
+function defaultAiConfig() {
+  return {
+    provider: "gemini",
+    openai: { apiKey: "", model: PROVIDER_DEFAULTS.openai.model },
+    gemini: { apiKey: "", model: PROVIDER_DEFAULTS.gemini.model },
+    claude: { apiKey: "", model: PROVIDER_DEFAULTS.claude.model }
+  };
+}
+function loadAiConfig() {
+  var cfg = loadData(STORAGE_KEYS.aiConfig, null);
+  if (!cfg) { cfg = defaultAiConfig(); saveData(STORAGE_KEYS.aiConfig, cfg); }
+  ["openai", "gemini", "claude"].forEach(function (p) {
+    if (!cfg[p]) cfg[p] = { apiKey: "", model: PROVIDER_DEFAULTS[p].model };
   });
-  return result;
+  return cfg;
 }
-function coachAnswer(question) {
-  var q = question.toLowerCase();
-  var withDisplay = chapters.map(function (c) { return { ch: c, displayStatus: computeDisplayStatus(c) }; });
-  var delayed = withDisplay.filter(function (x) { return x.displayStatus === "Delayed"; });
-  var revisionDue = withDisplay.filter(function (x) { return x.displayStatus === "Revision Due"; });
-  var readiness = coachSubjectReadiness();
+function renderAiSettingsUI() {
+  var cfg = loadAiConfig();
+  document.getElementById("aiProviderSelect").value = cfg.provider;
+  ["openai", "gemini", "claude"].forEach(function (p) {
+    document.getElementById("providerFields-" + p).style.display = (p === cfg.provider) ? "block" : "none";
+    document.getElementById("apiKey-" + p).value = cfg[p].apiKey;
+    document.getElementById("model-" + p).value = cfg[p].model;
+  });
+}
+document.getElementById("aiProviderSelect").addEventListener("change", function (e) {
+  var cfg = loadAiConfig();
+  cfg.provider = e.target.value;
+  saveData(STORAGE_KEYS.aiConfig, cfg);
+  renderAiSettingsUI();
+});
+document.getElementById("saveAiConfigBtn").addEventListener("click", function () {
+  var cfg = loadAiConfig();
+  ["openai", "gemini", "claude"].forEach(function (p) {
+    cfg[p].apiKey = document.getElementById("apiKey-" + p).value.trim();
+    cfg[p].model = document.getElementById("model-" + p).value.trim() || PROVIDER_DEFAULTS[p].model;
+  });
+  saveData(STORAGE_KEYS.aiConfig, cfg);
+  showToast("AI settings saved");
+});
 
-  if (q.indexOf("today") !== -1 || q === "today") {
-    var inProgress = chapters.filter(function (c) { return c.status === "In Progress"; });
-    if (delayed.length > 0) return "Start with " + delayed[0].ch.name + " (" + delayed[0].ch.subject + ") since it's past its target date. After that, continue " + (inProgress[0] ? inProgress[0].name : "your current chapter") + ".";
-    if (revisionDue.length > 0) return "Revise " + revisionDue[0].ch.name + " today, its revision checkpoint is due. Then continue with whatever chapter you're currently In Progress on.";
-    if (inProgress.length > 0) return "Continue with " + inProgress[0].name + " (" + inProgress[0].subject + "), currently at " + inProgress[0].progress + "% progress.";
-    return "You have no chapters In Progress right now. Head to Syllabus and start one.";
-  }
-  if (q.indexOf("backlog") !== -1 || q.indexOf("delayed") !== -1) {
-    if (delayed.length === 0) return "No delayed chapters right now. Your backlog is clear.";
-    return "You have " + delayed.length + " delayed chapter(s): " + delayed.map(function (x) { return x.ch.name; }).join(", ") + ".";
-  }
-  if (q.indexOf("ready") !== -1) {
-    var overall = Math.round((readiness.Physics + readiness.Chemistry + readiness.Mathematics) / 3);
-    return "Physics: " + readiness.Physics + "% | Chemistry: " + readiness.Chemistry + "% | Mathematics: " + readiness.Mathematics + "% | Overall readiness: " + overall + "%.";
-  }
-  if (q.indexOf("burnout") !== -1) {
-    var last3 = [];
-    for (var i = 0; i < 3; i++) {
-      var d = fmtDate(new Date(Date.now() - i * 86400000));
-      var mins = sessions.filter(function (s) { return s.date === d; }).reduce(function (sum, s) { return sum + s.minutes; }, 0);
-      last3.push(mins);
-    }
-    var avgHrs = (last3.reduce(function (a, b) { return a + b; }, 0) / 3 / 60).toFixed(1);
-    if (goalHours && parseFloat(avgHrs) < goalHours * 0.5) return "Your last 3 days average " + avgHrs + "h/day, well under your " + goalHours + "h goal. Consider a lighter, more sustainable schedule or checking what's blocking you.";
-    return "Your last 3 days average " + avgHrs + "h/day. That looks reasonably steady, keep your streak going without overdoing it.";
-  }
-  if (q.indexOf("weak") !== -1) {
-    var weakest = "Physics";
-    if (readiness.Chemistry < readiness[weakest]) weakest = "Chemistry";
-    if (readiness.Mathematics < readiness[weakest]) weakest = "Mathematics";
-    return weakest + " has your lowest completion at " + readiness[weakest] + "%. Consider allocating more sessions there.";
-  }
-  return "I can help with: what to study today, your backlog, exam readiness, burnout check, or your weakest subject. Try tapping one of the quick buttons above, or ask me directly.";
+function buildCoachSystemPrompt() {
+  var withDisplay = chapters.map(function (c) { return { ch: c, displayStatus: computeDisplayStatus(c) }; });
+  var delayed = withDisplay.filter(function (x) { return x.displayStatus === "Delayed"; }).map(function (x) { return x.ch.name; });
+  var revisionDue = withDisplay.filter(function (x) { return x.displayStatus === "Revision Due"; }).map(function (x) { return x.ch.name; });
+  var readiness = coachSubjectReadiness();
+  var today = todayStr();
+  var todayMinutes = sessions.filter(function (s) { return s.date === today; }).reduce(function (sum, s) { return sum + s.minutes; }, 0);
+  var totalMinutes = sessions.reduce(function (sum, s) { return sum + s.minutes; }, 0);
+  var pendingTaskTexts = tasks.filter(function (t) { return !t.done; }).map(function (t) { return t.text + " (" + t.priority + " priority)"; });
+  var recentTests = tests.slice(-5).map(function (t) { return t.name + ": " + t.marksObtained + "/" + t.totalMarks; });
+
+  var lines = [];
+  lines.push("You are an AI academic coach inside a personal JEE (Physics, Chemistry, Mathematics) exam preparation tracking app.");
+  lines.push("Give specific, personalized, encouraging but honest advice based ONLY on the real data below. Do not invent chapters, scores, or dates that are not listed. Keep answers concise, 3-6 sentences unless the student asks for more detail.");
+  lines.push("Current date: " + today + ".");
+  lines.push("Study streak: " + streak.count + " days. Daily study goal: " + (goalHours ? goalHours + " hours" : "not set") + ".");
+  lines.push("Study time today so far: " + (todayMinutes / 60).toFixed(1) + " hours. Total time ever logged: " + (totalMinutes / 60).toFixed(1) + " hours.");
+  lines.push("Average chapter progress by subject: Physics " + readiness.Physics + "%, Chemistry " + readiness.Chemistry + "%, Mathematics " + readiness.Mathematics + "%.");
+  lines.push("Chapters currently delayed past their target date: " + (delayed.length ? delayed.join(", ") : "none") + ".");
+  lines.push("Chapters with a revision checkpoint due: " + (revisionDue.length ? revisionDue.join(", ") : "none") + ".");
+  lines.push("Pending to-do tasks: " + (pendingTaskTexts.length ? pendingTaskTexts.join("; ") : "none") + ".");
+  lines.push("Most recent test scores: " + (recentTests.length ? recentTests.join("; ") : "no tests logged yet") + ".");
+  return lines.join(" ");
 }
+
+async function callAiProvider(provider, apiKey, model, systemPrompt, history) {
+  if (provider === "openai") {
+    var messages = [{ role: "system", content: systemPrompt }].concat(
+      history.map(function (m) { return { role: m.role, content: m.text }; })
+    );
+    var res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: model, messages: messages })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || ("HTTP " + res.status));
+    return data.choices[0].message.content;
+  }
+  if (provider === "gemini") {
+    var contents = history.map(function (m) {
+      return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.text }] };
+    });
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+    var res2 = await fetch(url, {
+      method: "POST",
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ system_instruction: { parts: [{ text: systemPrompt }] }, contents: contents })
+    });
+    var data2 = await res2.json();
+    if (!res2.ok) throw new Error((data2.error && data2.error.message) || ("HTTP " + res2.status));
+    return data2.candidates[0].content.parts[0].text;
+  }
+  if (provider === "claude") {
+    var msgs = history.map(function (m) { return { role: m.role, content: m.text }; });
+    var res3 = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({ model: model, max_tokens: 1024, system: systemPrompt, messages: msgs })
+    });
+    var data3 = await res3.json();
+    if (!res3.ok) throw new Error((data3.error && data3.error.message) || ("HTTP " + res3.status));
+    var textParts = (data3.content || []).filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; });
+    return textParts.join("");
+  }
+  throw new Error("Unknown provider");
+}
+
 function renderCoachChat() {
   var log = document.getElementById("coachChatLog");
   log.innerHTML = coachChat.map(function (m) {
@@ -1127,29 +1254,66 @@ function renderCoachChat() {
   }).join("");
   log.scrollTop = log.scrollHeight;
 }
-function coachAsk(text) {
-  coachChat.push({ role: "user", text: text });
-  coachChat.push({ role: "assistant", text: coachAnswer(text) });
+function appendThinkingBubble() {
+  var log = document.getElementById("coachChatLog");
+  var div = document.createElement("div");
+  div.className = "coach-bubble assistant";
+  div.id = "coachThinkingBubble";
+  div.textContent = "Thinking...";
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+function removeThinkingBubble() {
+  var el = document.getElementById("coachThinkingBubble");
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+async function sendToCoach(userText) {
+  coachChat.push({ role: "user", text: userText });
   saveData(STORAGE_KEYS.coachChat, coachChat);
   renderCoachChat();
+
+  var aiConfig = loadAiConfig();
+  var providerConf = aiConfig[aiConfig.provider];
+  if (!providerConf.apiKey) {
+    coachChat.push({ role: "assistant", text: "Please add your " + aiConfig.provider + " API key in AI Provider Settings above, then ask again for a personalized answer based on your real study data." });
+    saveData(STORAGE_KEYS.coachChat, coachChat);
+    renderCoachChat();
+    return;
+  }
+
+  appendThinkingBubble();
+  try {
+    var systemPrompt = buildCoachSystemPrompt();
+    var recentHistory = coachChat.slice(-10);
+    var replyText = await callAiProvider(aiConfig.provider, providerConf.apiKey, providerConf.model, systemPrompt, recentHistory);
+    removeThinkingBubble();
+    coachChat.push({ role: "assistant", text: replyText });
+    saveData(STORAGE_KEYS.coachChat, coachChat);
+    renderCoachChat();
+  } catch (err) {
+    removeThinkingBubble();
+    coachChat.push({ role: "assistant", text: "Error reaching " + aiConfig.provider + ": " + err.message + ". Check your API key and model name in AI Provider Settings above." });
+    saveData(STORAGE_KEYS.coachChat, coachChat);
+    renderCoachChat();
+  }
 }
 document.querySelectorAll(".coach-quick-btn").forEach(function (btn) {
   btn.addEventListener("click", function () {
     var labels = {
       today: "What should I study today?",
-      backlog: "Check my backlog",
-      readiness: "Exam Readiness",
-      burnout: "Burnout check"
+      backlog: "Check my backlog and tell me what's delayed.",
+      readiness: "What's my current exam readiness across all three subjects?",
+      burnout: "Do a burnout check based on my recent study hours and streak."
     };
-    coachAsk(labels[btn.dataset.q] || btn.textContent);
+    sendToCoach(labels[btn.dataset.q] || btn.textContent);
   });
 });
 document.getElementById("coachSendBtn").addEventListener("click", function () {
   var input = document.getElementById("coachInput");
   var text = input.value.trim();
   if (!text) return;
-  coachAsk(text);
   input.value = "";
+  sendToCoach(text);
 });
 
 document.querySelectorAll(".nav-item").forEach(function (btn) {
@@ -1164,7 +1328,7 @@ document.querySelectorAll(".nav-item").forEach(function (btn) {
     if (tab === "syllabus") renderChapters();
     if (tab === "dailylog") { renderLogChapterChips(); updateStopwatchDisplay(); startStopwatchInterval(); updatePomodoroDisplay(); startPomodoroInterval(); }
     if (tab === "tests") renderTests();
-    if (tab === "aicoach") renderCoachChat();
+    if (tab === "aicoach") { renderAiSettingsUI(); renderCoachChat(); }
   });
 });
 
@@ -1178,6 +1342,7 @@ function renderAll() {
 renderAll();
 renderChapters();
 renderLogChapterChips();
+renderAiSettingsUI();
 
 } catch (err) {
   var banner = document.getElementById("errorBanner");
@@ -1185,4 +1350,4 @@ renderLogChapterChips();
     banner.style.display = "block";
     banner.textContent = "App error: " + err.message;
   }
-}
+    }
