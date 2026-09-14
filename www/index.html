@@ -127,13 +127,18 @@
 
       <section class="card command-center">
         <div class="card-header"><h2 id="commandTitle">Physics Command Center</h2></div>
-        <div class="command-row">
-          <label>Target Completion: <input type="date" id="subjectTarget"></label>
-        </div>
-        <div class="command-stats">
-          <span>Total Chapters: <b id="totalChapters">0</b></span>
-          <span>Completed: <b id="completedChapters">0</b></span>
-          <span>Avg Progress: <b id="avgProgress">0%</b></span>
+        <div class="command-top-row">
+          <div id="subjectRingContainer"></div>
+          <div class="command-stats-col">
+            <div class="command-row">
+              <label>Target Completion: <input type="date" id="subjectTarget"></label>
+            </div>
+            <div class="command-stats">
+              <span>Total Chapters: <b id="totalChapters">0</b></span>
+              <span>Completed: <b id="completedChapters">0</b></span>
+              <span>Avg Progress: <b id="avgProgress">0%</b></span>
+            </div>
+          </div>
         </div>
       </section>
 
