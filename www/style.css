@@ -234,10 +234,18 @@ body {
 }
 .subject-tab.active { background: rgba(255,152,0,0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
 
+.command-top-row { display: flex; gap: 16px; align-items: center; }
+.command-stats-col { flex: 1; min-width: 0; }
 .command-row label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .command-row input[type="date"] { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 10px; border-radius: 8px; font-size: 13px; }
 .command-stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
 .command-stats b { color: var(--accent-cyan); }
+
+.ring-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ring-svg { transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--surface-2); }
+.ring-fg { fill: none; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
+.ring-percent { position: absolute; font-weight: 800; color: var(--text-primary); }
 
 .chapter-list { display: flex; flex-direction: column; gap: 12px; }
 .chapter-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
@@ -261,8 +269,24 @@ body {
 .date-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary); flex: 1; min-width: 120px; }
 .date-field input { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; }
 .completion-note { font-size: 11px; color: var(--accent-emerald); margin-bottom: 10px; }
-.lecture-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
-.lecture-input { width: 50px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 8px; border-radius: 8px; font-size: 12px; text-align: center; }
+
+.prep-breakdown { display: flex; gap: 14px; align-items: center; background: var(--surface-2); border-radius: 10px; padding: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.prep-ring { flex-shrink: 0; }
+.prep-fields { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 8px; }
+.prep-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
+.prep-row label { display: flex; align-items: center; gap: 6px; }
+.lecture-input { width: 44px; background: var(--surface); border: 1px solid var(--border); color: var(--text-primary); padding: 5px; border-radius: 6px; font-size: 11px; text-align: center; }
+
+.reference-materials { margin-bottom: 10px; }
+.reference-item { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; font-size: 12px; }
+.reference-item.done .reference-name { text-decoration: line-through; color: var(--text-secondary); }
+.reference-toggle { background: none; border: none; color: var(--accent-amber); font-size: 13px; padding: 0 2px; }
+.reference-name { flex: 1; }
+.reference-delete { background: none; border: none; color: var(--accent-red); font-size: 13px; padding: 0 2px; }
+.add-reference-row { display: flex; gap: 6px; }
+.add-reference-row input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 10px; border-radius: 8px; font-size: 12px; }
+.add-reference-row button { background: var(--accent-cyan); color: #000; border: none; border-radius: 8px; padding: 8px 12px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+
 .revision-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
 .revision-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; }
 .revision-chip.done { border-color: var(--accent-amber); color: var(--accent-amber); background: rgba(255,152,0,0.12); }
@@ -409,4 +433,4 @@ body {
   border-radius: 10px;
   font-size: 14px;
   margin-bottom: 4px;
-             }
+               }
