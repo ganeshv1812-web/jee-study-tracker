@@ -127,7 +127,9 @@ function makeChapter(subject, name) {
     revisions: [false, false, false, false, false, false],
     revisionOffsets: DEFAULT_REVISION_OFFSETS.slice(),
     extraRevisions: [],
-    notes: "", lecturesDone: 0, lecturesTotal: 0
+    notes: "", lecturesDone: 0, lecturesTotal: 0,
+    notesDone: false, exercisesDone: 0, exercisesTotal: 0, chapterTestDone: false,
+    referenceMaterials: []
   };
 }
 
@@ -153,6 +155,11 @@ chapters.forEach(function (c) {
   if (typeof c.completionDate === "undefined") c.completionDate = "";
   if (!c.revisionOffsets || c.revisionOffsets.length !== 6) c.revisionOffsets = DEFAULT_REVISION_OFFSETS.slice();
   if (!c.extraRevisions) c.extraRevisions = [];
+  if (typeof c.notesDone === "undefined") c.notesDone = false;
+  if (typeof c.exercisesDone === "undefined") c.exercisesDone = 0;
+  if (typeof c.exercisesTotal === "undefined") c.exercisesTotal = 0;
+  if (typeof c.chapterTestDone === "undefined") c.chapterTestDone = false;
+  if (!c.referenceMaterials) c.referenceMaterials = [];
   if (!c.revisions || c.revisions.length !== 6) {
     var old = c.revisions || [];
     var next = [false, false, false, false, false, false];
@@ -247,6 +254,35 @@ function isRevisionOverdue(ch, index) {
   var due = new Date(completionD);
   due.setDate(due.getDate() + ch.revisionOffsets[index]);
   return todayMidnight() >= due;
+}
+
+function computeCompositePercent(ch) {
+  var lectureFrac = ch.lecturesTotal > 0 ? Math.min(1, ch.lecturesDone / ch.lecturesTotal) : 0;
+  var notesFrac = ch.notesDone ? 1 : 0;
+  var refs = ch.referenceMaterials || [];
+  var refTotal = refs.length;
+  var refDone = refs.filter(function (r) { return r.done; }).length;
+  var exTotalCombined = (ch.exercisesTotal || 0) + refTotal;
+  var exDoneCombined = (ch.exercisesDone || 0) + refDone;
+  var exercisesFrac = exTotalCombined > 0 ? Math.min(1, exDoneCombined / exTotalCombined) : 0;
+  var testFrac = ch.chapterTestDone ? 1 : 0;
+  return Math.round(((lectureFrac + notesFrac + exercisesFrac + testFrac) / 4) * 100);
+}
+
+function renderRingWrap(percent, size, strokeWidth, strokeColor) {
+  var radius = (size - strokeWidth) / 2;
+  var circumference = 2 * Math.PI * radius;
+  var clamped = Math.max(0, Math.min(100, percent));
+  var offset = circumference * (1 - clamped / 100);
+  var center = size / 2;
+  var fontSize = Math.round(size * 0.22);
+  return "<div class='ring-wrap' style='width:" + size + "px;height:" + size + "px;'>" +
+    "<svg width='" + size + "' height='" + size + "' viewBox='0 0 " + size + " " + size + "' class='ring-svg'>" +
+    "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "' class='ring-bg' stroke-width='" + strokeWidth + "'></circle>" +
+    "<circle cx='" + center + "' cy='" + center + "' r='" + radius + "' class='ring-fg' stroke-width='" + strokeWidth + "' style='stroke:" + strokeColor + ";stroke-dasharray:" + circumference.toFixed(2) + ";stroke-dashoffset:" + offset.toFixed(2) + ";'></circle>" +
+    "</svg>" +
+    "<div class='ring-percent' style='font-size:" + fontSize + "px;'>" + clamped + "%</div>" +
+    "</div>";
 }
 
 function updateStreak() {
@@ -553,6 +589,8 @@ function renderCommandCenter() {
   document.getElementById("completedChapters").textContent = subChapters.filter(function (c) { return c.status === "Completed"; }).length;
   var avg = subChapters.length === 0 ? 0 : Math.round(subChapters.reduce(function (sum, c) { return sum + c.progress; }, 0) / subChapters.length);
   document.getElementById("avgProgress").textContent = avg + "%";
+  var compositeAvg = subChapters.length === 0 ? 0 : Math.round(subChapters.reduce(function (sum, c) { return sum + computeCompositePercent(c); }, 0) / subChapters.length);
+  document.getElementById("subjectRingContainer").innerHTML = renderRingWrap(compositeAvg, 90, 9, "var(--accent-cyan)");
 }
 document.getElementById("subjectTarget").addEventListener("change", function (e) {
   if (!subjectMeta[currentSubject]) subjectMeta[currentSubject] = {};
@@ -570,8 +608,19 @@ function renderChapters() {
   }
   list.innerHTML = filtered.map(function (ch) {
     var displayStatus = computeDisplayStatus(ch);
+    var compositePercent = computeCompositePercent(ch);
     var subtopicsHtml = (ch.subtopics && ch.subtopics.length)
       ? "<div class='subtopics-row'>" + ch.subtopics.map(function (s) { return "<span>&bull; " + escapeHtml(s) + "</span>"; }).join(" ") + "</div>" : "";
+    var refs = ch.referenceMaterials || [];
+    var refMaterialsHtml = refs.length === 0
+      ? "<div class='empty-inline'>No reference materials added</div>"
+      : refs.map(function (r) {
+        return "<div class='reference-item" + (r.done ? " done" : "") + "'>" +
+          "<button type='button' class='reference-toggle' data-id='" + ch.id + "' data-refid='" + r.id + "'>" + (r.done ? "&#10003;" : "&#9675;") + "</button>" +
+          "<span class='reference-name'>" + escapeHtml(r.name) + "</span>" +
+          "<button type='button' class='reference-delete' data-id='" + ch.id + "' data-refid='" + r.id + "'>&#10005;</button>" +
+          "</div>";
+      }).join("");
     var extraRevisionsHtml = (ch.extraRevisions && ch.extraRevisions.length)
       ? ch.extraRevisions.map(function (rev) {
         var cls = "extra-revision-chip" + (rev.done ? " done" : "") + (isExtraRevisionOverdue(rev) ? " overdue" : "");
@@ -601,11 +650,22 @@ function renderChapters() {
       "<input type='range' class='progress-slider' data-id='" + ch.id + "' min='0' max='100' value='" + ch.progress + "'>" +
       "<span class='progress-label'>" + ch.progress + "%</span>" +
       "</div>" +
-      "<div class='lecture-row'>" +
-      "<span>Lectures:</span>" +
-      "<input type='number' class='lecture-input lecture-done-input' data-id='" + ch.id + "' min='0' value='" + ch.lecturesDone + "'>" +
-      "<span>/</span>" +
-      "<input type='number' class='lecture-input lecture-total-input' data-id='" + ch.id + "' min='0' value='" + ch.lecturesTotal + "'>" +
+      "<div class='prep-breakdown'>" +
+      "<div class='prep-ring'>" + renderRingWrap(compositePercent, 64, 7, "var(--accent-amber)") + "</div>" +
+      "<div class='prep-fields'>" +
+      "<div class='prep-row'><span>Lectures</span><input type='number' class='lecture-input lecture-done-input' data-id='" + ch.id + "' min='0' value='" + ch.lecturesDone + "'><span>/</span><input type='number' class='lecture-input lecture-total-input' data-id='" + ch.id + "' min='0' value='" + ch.lecturesTotal + "'></div>" +
+      "<div class='prep-row'><label><input type='checkbox' class='notes-done-checkbox' data-id='" + ch.id + "' " + (ch.notesDone ? "checked" : "") + "> Notes Complete</label></div>" +
+      "<div class='prep-row'><span>Exercises</span><input type='number' class='lecture-input exercises-done-input' data-id='" + ch.id + "' min='0' value='" + ch.exercisesDone + "'><span>/</span><input type='number' class='lecture-input exercises-total-input' data-id='" + ch.id + "' min='0' value='" + ch.exercisesTotal + "'></div>" +
+      "<div class='prep-row'><label><input type='checkbox' class='chapter-test-checkbox' data-id='" + ch.id + "' " + (ch.chapterTestDone ? "checked" : "") + "> Chapter Test Done</label></div>" +
+      "</div>" +
+      "</div>" +
+      "<div class='reference-materials'>" +
+      "<div class='field-label'>Reference Materials</div>" +
+      refMaterialsHtml +
+      "<div class='add-reference-row'>" +
+      "<input type='text' class='reference-name-input' data-id='" + ch.id + "' placeholder='e.g. NCERT Exemplar Ch.5'>" +
+      "<button type='button' class='add-reference-btn' data-id='" + ch.id + "'>+ Add</button>" +
+      "</div>" +
       "</div>" +
       "<div class='revision-row'>" +
       [0, 1, 2, 3, 4, 5].map(function (i) {
@@ -650,7 +710,9 @@ document.getElementById("chapterForm").addEventListener("submit", function (e) {
     revisions: [false, false, false, false, false, false],
     revisionOffsets: DEFAULT_REVISION_OFFSETS.slice(),
     extraRevisions: [],
-    notes: "", lecturesDone: 0, lecturesTotal: 0
+    notes: "", lecturesDone: 0, lecturesTotal: 0,
+    notesDone: false, exercisesDone: 0, exercisesTotal: 0, chapterTestDone: false,
+    referenceMaterials: []
   });
   saveData(STORAGE_KEYS.chapters, chapters);
   nameInput.value = ""; subtopicsInput.value = ""; startInput.value = ""; targetInput.value = "";
@@ -665,6 +727,9 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
   var extraToggle = e.target.closest(".extra-revision-toggle");
   var extraDelete = e.target.closest(".extra-revision-delete");
   var addExtraBtn = e.target.closest(".add-extra-revision-btn");
+  var referenceToggle = e.target.closest(".reference-toggle");
+  var referenceDelete = e.target.closest(".reference-delete");
+  var addReferenceBtn = e.target.closest(".add-reference-btn");
 
   if (extraToggle) {
     var chET = chapters.find(function (c) { return c.id === extraToggle.dataset.id; });
@@ -685,12 +750,41 @@ document.getElementById("chapterList").addEventListener("click", function (e) {
   }
   if (addExtraBtn) {
     var chAdd = chapters.find(function (c) { return c.id === addExtraBtn.dataset.id; });
-    var card = addExtraBtn.closest(".chapter-card");
-    var dateInput = card ? card.querySelector(".extra-revision-date-input") : null;
+    var cardExtra = addExtraBtn.closest(".chapter-card");
+    var dateInput = cardExtra ? cardExtra.querySelector(".extra-revision-date-input") : null;
     if (chAdd && dateInput && dateInput.value) {
       chAdd.extraRevisions.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: dateInput.value, done: false });
       saveData(STORAGE_KEYS.chapters, chapters);
       renderChapters(); renderMiniChapterLists(); renderInsight();
+    }
+    return;
+  }
+  if (referenceToggle) {
+    var chRT = chapters.find(function (c) { return c.id === referenceToggle.dataset.id; });
+    if (chRT) {
+      var refT = (chRT.referenceMaterials || []).find(function (r) { return r.id === referenceToggle.dataset.refid; });
+      if (refT) refT.done = !refT.done;
+    }
+    saveData(STORAGE_KEYS.chapters, chapters);
+    renderChapters(); renderMiniChapterLists();
+    return;
+  }
+  if (referenceDelete) {
+    var chRD = chapters.find(function (c) { return c.id === referenceDelete.dataset.id; });
+    if (chRD) chRD.referenceMaterials = (chRD.referenceMaterials || []).filter(function (r) { return r.id !== referenceDelete.dataset.refid; });
+    saveData(STORAGE_KEYS.chapters, chapters);
+    renderChapters(); renderMiniChapterLists();
+    return;
+  }
+  if (addReferenceBtn) {
+    var chRefAdd = chapters.find(function (c) { return c.id === addReferenceBtn.dataset.id; });
+    var cardRef = addReferenceBtn.closest(".chapter-card");
+    var nameInputRef = cardRef ? cardRef.querySelector(".reference-name-input") : null;
+    if (chRefAdd && nameInputRef && nameInputRef.value.trim()) {
+      if (!chRefAdd.referenceMaterials) chRefAdd.referenceMaterials = [];
+      chRefAdd.referenceMaterials.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: nameInputRef.value.trim(), done: false });
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists();
     }
     return;
   }
@@ -765,6 +859,34 @@ document.getElementById("chapterList").addEventListener("change", function (e) {
       if (e.target.classList.contains("lecture-done-input")) chL.lecturesDone = val;
       else chL.lecturesTotal = val;
       saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters();
+    }
+  }
+  if (e.target.classList.contains("exercises-done-input") || e.target.classList.contains("exercises-total-input")) {
+    var chEx = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chEx) {
+      var valEx = parseInt(e.target.value, 10);
+      if (isNaN(valEx) || valEx < 0) valEx = 0;
+      if (e.target.classList.contains("exercises-done-input")) chEx.exercisesDone = valEx;
+      else chEx.exercisesTotal = valEx;
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters();
+    }
+  }
+  if (e.target.classList.contains("notes-done-checkbox")) {
+    var chND = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chND) {
+      chND.notesDone = e.target.checked;
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists(); renderInsight();
+    }
+  }
+  if (e.target.classList.contains("chapter-test-checkbox")) {
+    var chCT = chapters.find(function (c) { return c.id === e.target.dataset.id; });
+    if (chCT) {
+      chCT.chapterTestDone = e.target.checked;
+      saveData(STORAGE_KEYS.chapters, chapters);
+      renderChapters(); renderMiniChapterLists(); renderInsight();
     }
   }
   if (e.target.classList.contains("revision-offset-input")) {
